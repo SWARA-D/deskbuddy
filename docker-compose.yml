@@ -1,0 +1,110 @@
+
+services:
+  # Databases & Cache
+  postgres:
+    image: postgres:15-alpine
+    container_name: deskbuddy_postgres
+    environment:
+      POSTGRES_USER: deskbuddy
+      POSTGRES_PASSWORD: deskbuddy
+      POSTGRES_DB: postgres
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deskbuddy"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: deskbuddy_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Microservices
+  gateway:
+    build: ./services/gateway
+    container_name: deskbuddy_gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - JWT_SECRET=DEV_SECRET_CHANGE_IN_PRODUCTION
+      - REDIS_URL=redis://redis:6379/0
+    command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
+
+  auth_service:
+    build: ./services/auth_service
+    container_name: deskbuddy_auth
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_auth
+      - JWT_SECRET=DEV_SECRET_CHANGE_IN_PRODUCTION
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+  journal_service:
+    build: ./services/journal_service
+    container_name: deskbuddy_journal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_journal
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
+  nlp_service:
+    build: ./services/nlp_service
+    container_name: deskbuddy_nlp
+    command: uvicorn main:app --host 0.0.0.0 --port 8003 --reload
+
+  music_service:
+    build: ./services/music_service
+    container_name: deskbuddy_music
+    command: uvicorn main:app --host 0.0.0.0 --port 8004 --reload
+
+  tasks_service:
+    build: ./services/tasks_service
+    container_name: deskbuddy_tasks
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_tasks
+    command: uvicorn main:app --host 0.0.0.0 --port 8005 --reload
+
+  checkin_service:
+    build: ./services/checkin_service
+    container_name: deskbuddy_checkin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_checkin
+    command: uvicorn main:app --host 0.0.0.0 --port 8006 --reload
+
+  bot_service:
+    build: ./services/bot_service
+    container_name: deskbuddy_bot
+    command: uvicorn main:app --host 0.0.0.0 --port 8007 --reload
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: deskbuddy_network

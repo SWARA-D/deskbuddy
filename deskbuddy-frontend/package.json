@@ -1,0 +1,33 @@
+{
+  "name": "deskbuddy-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "clsx": "^2.1.0",
+    "next": "15.5.12",
+    "pg": "^8.20.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tailwind-merge": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "@types/pg": "^8.18.0",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "autoprefixer": "^10.4.17",
+    "jsdom": "^29.0.1",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.3.3",
+    "vitest": "^2.0.0"
+  }
+}

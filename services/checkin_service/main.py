@@ -39,6 +39,8 @@ def get_db():
     conn = get_pool().getconn()
     conn.cursor_factory = RealDictCursor
     try:
+        with conn.cursor() as cur:
+            cur.execute("SET search_path TO checkin_db")
         yield conn
     finally:
         get_pool().putconn(conn)

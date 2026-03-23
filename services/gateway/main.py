@@ -58,8 +58,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        # Add your production Vercel URL here, e.g.:
-        # "https://deskbuddy.vercel.app",
+        "https://deskbuddy-gilt.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],

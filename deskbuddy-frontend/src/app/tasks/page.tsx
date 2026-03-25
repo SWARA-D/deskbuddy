@@ -96,10 +96,21 @@ function TasksInner() {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  const TASKS_KEY = "deskbuddy_tasks";
+
   useEffect(() => {
     setHabits(getHabits());
     setGoals(getGoals());
+    try {
+      const saved = localStorage.getItem(TASKS_KEY);
+      if (saved) setTasks(JSON.parse(saved));
+    } catch { /* ignore */ }
   }, []);
+
+  const saveTasks = (next: Task[]) => {
+    setTasks(next);
+    try { localStorage.setItem(TASKS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
 
   const todayTasks    = tasks.filter((t) => t.dueAt === today);
   const upcomingTasks = tasks.filter((t) => t.dueAt >  today);
@@ -122,8 +133,8 @@ function TasksInner() {
       if (returnTo) router.push(returnTo);
     } else {
       if (!dueAt) return;
-      setTasks((prev) => [
-        ...prev,
+      saveTasks([
+        ...tasks,
         { id: Date.now(), title: title.trim(), category: category as Category, difficulty, dueAt, status: "todo" },
       ]);
       setTitle("");
@@ -132,9 +143,7 @@ function TasksInner() {
   };
 
   const toggleDone = (id: number) =>
-    setTasks((prev) =>
-      prev.map((t) => t.id === id ? { ...t, status: t.status === "todo" ? "done" : "todo" } : t)
-    );
+    saveTasks(tasks.map((t) => t.id === id ? { ...t, status: t.status === "todo" ? "done" : "todo" } : t));
 
   return (
     <DeskLayout>

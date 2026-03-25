@@ -141,8 +141,12 @@ def login(req: LoginRequest):
             user = cur.fetchone()
 
     # Always run bcrypt to prevent timing-based user enumeration
-    dummy_hash = "$2b$12$eImiTXuWVxfM37uY4JANjQ"
-    pwd_context.verify(req.password, user["password_hash"] if user else dummy_hash)
+    # Must be a complete 60-char bcrypt hash, not just the salt prefix
+    dummy_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGRvGsqzxqWqIuBfBWKtqVPKsz."
+    try:
+        pwd_context.verify(req.password, user["password_hash"] if user else dummy_hash)
+    except ValueError:
+        pass  # dummy hash may not verify — that's fine, we check user below
 
     if not user or not pwd_context.verify(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")

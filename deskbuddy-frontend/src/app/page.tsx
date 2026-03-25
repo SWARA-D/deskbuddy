@@ -107,42 +107,50 @@ function DraggableItem({
   onMove: (id: string, pos: Pos) => void;
   children: React.ReactNode;
 }) {
-  const dragging = useRef(false);
-  const moved    = useRef(false);
-  const origin   = useRef({ mx: 0, my: 0, ix: 0, iy: 0 });
-  const [active, setActive]     = useState(false);
-  const [hasMoved, setHasMoved] = useState(false);
+  const dragging  = useRef(false);
+  const moved     = useRef(false);
+  const origin    = useRef({ mx: 0, my: 0, ix: 0, iy: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Global move/up listeners so drag works even when pointer leaves the element.
+  // NOT using setPointerCapture — that redirects pointerup to the div, which
+  // causes the browser to fire click on the div instead of the Link child.
+  useEffect(() => {
+    const handleMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      const dx = e.clientX - origin.current.mx;
+      const dy = e.clientY - origin.current.my;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+      if (moved.current) {
+        setIsDragging(true);
+        onMove(id, { x: origin.current.ix + dx, y: origin.current.iy + dy });
+      }
+    };
+
+    const handleUp = () => {
+      dragging.current = false;
+      setIsDragging(false);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup",   handleUp);
+    window.addEventListener("pointercancel", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup",   handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+    };
+  }, [id, onMove]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    e.stopPropagation();
     dragging.current = true;
     moved.current    = false;
     origin.current   = { mx: e.clientX, my: e.clientY, ix: pos.x, iy: pos.y };
-    setActive(true);
-    setHasMoved(false);
-    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
   };
 
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragging.current) return;
-    const dx = e.clientX - origin.current.mx;
-    const dy = e.clientY - origin.current.my;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-      moved.current = true;
-      setHasMoved(true);
-    }
-    if (moved.current) {
-      onMove(id, { x: origin.current.ix + dx, y: origin.current.iy + dy });
-    }
-  };
-
-  const onPointerUp = () => {
-    dragging.current = false;
-    setActive(false);
-    setHasMoved(false);
-  };
-
-  // capture phase: suppress Link navigation when the pointer actually moved
+  // Capture phase: suppress Link navigation when the pointer actually moved
   const onClickCapture = (e: React.MouseEvent) => {
     if (moved.current) {
       e.preventDefault();
@@ -158,20 +166,17 @@ function DraggableItem({
         left: pos.x,
         top: pos.y,
         touchAction: "none",
-        zIndex: active ? 100 : "auto",
-        cursor: active ? "grabbing" : undefined,
+        zIndex: isDragging ? 100 : "auto",
+        cursor: isDragging ? "grabbing" : undefined,
         transform: `scale(${scale})`,
         transformOrigin: "top left",
       }}
       className="select-none"
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
       onClickCapture={onClickCapture}
     >
-      {/* transparent overlay during drag — only shown after movement so it never swallows a plain click */}
-      {active && hasMoved && (
+      {/* overlay only during active drag — keeps cursor and blocks accidental child hovers */}
+      {isDragging && (
         <div className="absolute z-[200] cursor-grabbing" style={{ inset: "-24px" }} />
       )}
       {children}

@@ -12,7 +12,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const TOKEN_KEY  = "db-token";
 const USER_KEY   = "db-user";
 const DEMO_EMAIL = "demo@deskbuddy.app";
-const DEMO_SEEDED_KEY = "deskbuddy_demo_seeded";
+const DEMO_SEEDED_KEY = "deskbuddy_demo_seeded_v2";
 
 function seedDemoData() {
   if (localStorage.getItem(DEMO_SEEDED_KEY)) return;
@@ -45,18 +45,24 @@ function seedDemoData() {
     { id: now+26, title: "Review Spanish flashcards (15 min)", category: "learning",   difficulty: 1, dueAt: daysAgo(-3),    status: "todo" },
     { id: now+27, title: "Deep clean desk + workspace",        category: "confidence", difficulty: 2, dueAt: daysAgo(-5),    status: "todo" },
   ]));
+  function makeAnalysis(sentiment: string, emotion: string, confidence: number, mood_summary: string) {
+    return JSON.stringify({
+      mood: { sentiment, emotion, confidence, mood_summary, habits_to_highlight: [], suggested_tasks: [], _source: "keyword" },
+      aiTodos: [], aiHabitIds: [], habitDoneToday: [],
+    });
+  }
   const journal = [
-    { date: daysAgo(21), text: "First day properly using this app. Setting some intentions for the month — want to be more consistent with journaling, drink more water, and actually go to bed before midnight.", analysis: { sentiment: "positive", emotion: "calm",    confidence: 0.61, mood_summary: "Reflective and calm start to the month.",           habits_to_highlight: [], suggested_tasks: [], _source: "keyword" } },
-    { date: daysAgo(17), text: "Completely crashed today. Slept through my alarm, missed a meeting, spent the afternoon trying to catch up. I hate days like this. Everything just piles on.",                 analysis: { sentiment: "negative", emotion: "anxious", confidence: 0.82, mood_summary: "Overwhelmed and frustrated — high-stress day.",     habits_to_highlight: [], suggested_tasks: [], _source: "keyword" } },
-    { date: daysAgo(14), text: "Decent morning. Made coffee before touching my phone which felt like a win. Did a 20 min walk. Not every day has to be a masterpiece I guess.",                               analysis: { sentiment: "positive", emotion: "calm",    confidence: 0.58, mood_summary: "Grounded and gently optimistic.",                   habits_to_highlight: [], suggested_tasks: [], _source: "keyword" } },
-    { date: daysAgo(11), text: "Had a long video call with my sister. We laughed so much. I forget how much I need that. Feeling lighter than I have all week.",                                              analysis: { sentiment: "positive", emotion: "excited", confidence: 0.79, mood_summary: "Joyful and recharged — connection helped a lot.",    habits_to_highlight: [], suggested_tasks: [], _source: "keyword" } },
-    { date: daysAgo(7),  text: "Can't shake this low feeling. Nothing is technically wrong but I just feel kind of empty. Going to try to get to bed early and hope tomorrow is better.",                     analysis: { sentiment: "negative", emotion: "sad",     confidence: 0.74, mood_summary: "Quiet sadness — needs rest and patience.",             habits_to_highlight: [], suggested_tasks: [], _source: "keyword" } },
-    { date: daysAgo(4),  text: "i am okay. i have to go for a walk tomorrow",                                                                                                                                analysis: { sentiment: "neutral",  emotion: "neutral", confidence: 0.52, mood_summary: "Flat but stable — small intention set.",             habits_to_highlight: [], suggested_tasks: [], _source: "keyword" } },
-    { date: daysAgo(2),  text: "Really good day. Finished the thing I've been procrastinating on for two weeks. Treated myself to takeout. Brain feels clear. This is what I want more of.",                 analysis: { sentiment: "positive", emotion: "excited", confidence: 0.88, mood_summary: "Accomplished and satisfied — productive momentum.", habits_to_highlight: [], suggested_tasks: [], _source: "keyword" } },
+    { date: daysAgo(21), text: "First day properly using this app. Setting some intentions for the month — want to be more consistent with journaling, drink more water, and actually go to bed before midnight.", analysis: makeAnalysis("positive", "calm",    0.61, "Reflective and calm start to the month.")           },
+    { date: daysAgo(17), text: "Completely crashed today. Slept through my alarm, missed a meeting, spent the afternoon trying to catch up. I hate days like this. Everything just piles on.",                 analysis: makeAnalysis("negative", "anxious", 0.82, "Overwhelmed and frustrated — high-stress day.")     },
+    { date: daysAgo(14), text: "Decent morning. Made coffee before touching my phone which felt like a win. Did a 20 min walk. Not every day has to be a masterpiece I guess.",                               analysis: makeAnalysis("positive", "calm",    0.58, "Grounded and gently optimistic.")                   },
+    { date: daysAgo(11), text: "Had a long video call with my sister. We laughed so much. I forget how much I need that. Feeling lighter than I have all week.",                                              analysis: makeAnalysis("positive", "excited", 0.79, "Joyful and recharged — connection helped a lot.")    },
+    { date: daysAgo(7),  text: "Can't shake this low feeling. Nothing is technically wrong but I just feel kind of empty. Going to try to get to bed early and hope tomorrow is better.",                     analysis: makeAnalysis("negative", "sad",     0.74, "Quiet sadness — needs rest and patience.")             },
+    { date: daysAgo(4),  text: "i am okay. i have to go for a walk tomorrow",                                                                                                                                analysis: makeAnalysis("neutral",  "neutral", 0.52, "Flat but stable — small intention set.")             },
+    { date: daysAgo(2),  text: "Really good day. Finished the thing I've been procrastinating on for two weeks. Treated myself to takeout. Brain feels clear. This is what I want more of.",                 analysis: makeAnalysis("positive", "excited", 0.88, "Accomplished and satisfied — productive momentum.") },
   ];
   for (const e of journal) {
     localStorage.setItem(`deskbuddy_draft_${e.date}`,    e.text);
-    localStorage.setItem(`deskbuddy_analysis_${e.date}`, JSON.stringify(e.analysis));
+    localStorage.setItem(`deskbuddy_analysis_${e.date}`, e.analysis);
   }
   localStorage.setItem(DEMO_SEEDED_KEY, "1");
 }

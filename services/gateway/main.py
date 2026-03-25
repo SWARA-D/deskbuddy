@@ -60,6 +60,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://deskbuddy-gilt.vercel.app",
     ],
+    # Covers all Vercel preview deployment URLs
+    allow_origin_regex=r"https://deskbuddy.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-Id"],

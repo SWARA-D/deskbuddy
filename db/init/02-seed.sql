@@ -22,7 +22,7 @@ VALUES (
   'demo@deskbuddy.app',
   -- Replace this hash with the output of the python3 command above.
   -- This placeholder intentionally won't verify so prod data stays safe.
-  '$2b$12$REPLACE_ME_RUN_THE_COMMAND_ABOVE_AND_PASTE_HASH_HERE',
+  '$2b$12$$2b$12$sgU3Yej3n5LSKhTM/Cgme.I4CczTVLvA7dnGVoYzLuLxRMkQavyBC',
   NOW() - INTERVAL '30 days'
 )
 ON CONFLICT (email) DO NOTHING;

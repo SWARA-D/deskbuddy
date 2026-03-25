@@ -20,9 +20,7 @@ INSERT INTO auth_db.users (id, email, password_hash, created_at)
 VALUES (
   uid,
   'demo@deskbuddy.app',
-  -- Replace this hash with the output of the python3 command above.
-  -- This placeholder intentionally won't verify so prod data stays safe.
-  '$2b$12$sgU3Yej3n5LSKhTM/Cgme.I4CczTVLvA7dnGVoYzLuLxRMkQavyBC',
+  '$2b$12$HvfjkK7co2neofUPAajuRepPghq9CGE2g242JnVW6qdg6h7r0RI/K',
   NOW() - INTERVAL '30 days'
 )
 ON CONFLICT (email) DO NOTHING;

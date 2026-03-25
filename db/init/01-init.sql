@@ -1,69 +1,48 @@
--- DeskBuddy Database Initialization (PostgreSQL)
--- v2 — adds journal_analyses columns inline on journal_entries
---      (single table, easier for Next.js API routes without a microservice layer)
-
-------------------------------------------------------------
--- Create databases
-------------------------------------------------------------
-CREATE DATABASE deskbuddy_auth;
-CREATE DATABASE deskbuddy_journal;
-CREATE DATABASE deskbuddy_tasks;
-CREATE DATABASE deskbuddy_checkin;
-
-------------------------------------------------------------
--- Auth Database
-------------------------------------------------------------
-\connect deskbuddy_auth
+-- DeskBuddy Database Initialization (PostgreSQL / Supabase)
+-- Uses schemas instead of separate databases (Supabase compatible)
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-CREATE TABLE IF NOT EXISTS users (
+------------------------------------------------------------
+-- Auth Schema
+------------------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS auth_db;
+
+CREATE TABLE IF NOT EXISTS auth_db.users (
     id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email         VARCHAR(255) UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     created_at    TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_email ON auth_db.users(email);
 
 ------------------------------------------------------------
--- Journal Database  (entries + analysis in one table)
+-- Journal Schema
 ------------------------------------------------------------
-\connect deskbuddy_journal
+CREATE SCHEMA IF NOT EXISTS journal_db;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-CREATE TABLE IF NOT EXISTS journal_entries (
-    id           UUID      PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id      UUID      NOT NULL,
-    text         TEXT      NOT NULL,
+CREATE TABLE IF NOT EXISTS journal_db.journal_entries (
+    id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id      UUID        NOT NULL,
+    text         TEXT        NOT NULL,
     input_type   VARCHAR(20) DEFAULT 'typed',
-    -- analysis columns (populated after AI analysis)
-    sentiment    VARCHAR(20)  DEFAULT NULL,
-    emotion      VARCHAR(32)  DEFAULT NULL,
-    confidence   FLOAT        DEFAULT NULL,
-    mood_summary TEXT         DEFAULT NULL,
-    created_at   TIMESTAMP  DEFAULT NOW()
+    sentiment    VARCHAR(20) DEFAULT NULL,
+    emotion      VARCHAR(32) DEFAULT NULL,
+    confidence   FLOAT       DEFAULT NULL,
+    mood_summary TEXT        DEFAULT NULL,
+    created_at   TIMESTAMP   DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_journal_user
-    ON journal_entries(user_id, created_at DESC);
-
--- Run this if you already have the old schema (idempotent):
--- ALTER TABLE journal_entries
---     ADD COLUMN IF NOT EXISTS sentiment    VARCHAR(20),
---     ADD COLUMN IF NOT EXISTS emotion      VARCHAR(32),
---     ADD COLUMN IF NOT EXISTS confidence   FLOAT,
---     ADD COLUMN IF NOT EXISTS mood_summary TEXT;
+    ON journal_db.journal_entries(user_id, created_at DESC);
 
 ------------------------------------------------------------
--- Tasks Database
+-- Tasks Schema
 ------------------------------------------------------------
-\connect deskbuddy_tasks
+CREATE SCHEMA IF NOT EXISTS tasks_db;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-CREATE TABLE IF NOT EXISTS tasks (
+CREATE TABLE IF NOT EXISTS tasks_db.tasks (
     id         UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id    UUID         NOT NULL,
     title      VARCHAR(200) NOT NULL,
@@ -74,16 +53,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TIMESTAMP    DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id, due_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks_db.tasks(user_id, due_at);
 
 ------------------------------------------------------------
--- Checkin Database
+-- Checkin Schema
 ------------------------------------------------------------
-\connect deskbuddy_checkin
+CREATE SCHEMA IF NOT EXISTS checkin_db;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-CREATE TABLE IF NOT EXISTS daily_checkins (
+CREATE TABLE IF NOT EXISTS checkin_db.daily_checkins (
     id           UUID    PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id      UUID    NOT NULL,
     checkin_date DATE    NOT NULL,
@@ -94,4 +71,4 @@ CREATE TABLE IF NOT EXISTS daily_checkins (
 );
 
 CREATE INDEX IF NOT EXISTS idx_checkins_user
-    ON daily_checkins(user_id, checkin_date DESC);
+    ON checkin_db.daily_checkins(user_id, checkin_date DESC);

@@ -1,0 +1,28 @@
+# DeskBuddy — merged requirements for Render deployment (combined_app.py)
+# Generated from all 8 service requirements.txt files
+
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.1
+
+# Data validation
+pydantic==2.10.3
+pydantic-settings==2.6.1
+email-validator>=2.0.0
+
+# Auth / JWT
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
+
+# HTTP client (gateway + journal → nlp calls)
+httpx==0.28.1
+
+# Cache / rate limiting
+redis==5.2.1
+
+# Database
+psycopg2-binary==2.9.10
+
+# NLP
+vaderSentiment==3.3.2

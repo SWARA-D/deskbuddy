@@ -191,7 +191,11 @@ async def proxy_request(
             else:
                 raise ValueError(f"Unsupported method: {method}")
 
-            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+            try:
+                content = resp.json()
+            except Exception:
+                content = {"success": False, "message": resp.text or "Service error"}
+            return JSONResponse(content=content, status_code=resp.status_code)
         except httpx.TimeoutException:
             logger.error(f"Timeout proxying to {target_url}")
             return JSONResponse(

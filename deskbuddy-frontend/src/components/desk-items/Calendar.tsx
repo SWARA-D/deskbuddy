@@ -31,13 +31,13 @@ export default function CalendarCard() {
       className="z-20 group cursor-pointer hover:scale-[1.02] transition-transform duration-200"
     >
       {/* card */}
-      <div className="w-52 sm:w-64 lg:w-72 bg-calendar-white border-2 border-black/10 p-3 sm:p-4 lg:p-6 pixel-shadow flex flex-col gap-2 sm:gap-3">
+      <div className="w-44 sm:w-52 lg:w-56 bg-calendar-white border-2 border-black/10 p-3 sm:p-4 pixel-shadow flex flex-col gap-2">
         {/* header row */}
         <div className="flex items-center justify-between border-b-2 border-pixel-black/10 pb-2 mb-2">
-          <p className="font-pixel text-xl sm:text-2xl text-pixel-black tracking-widest uppercase">
+          <p className="font-pixel text-lg sm:text-xl text-pixel-black tracking-widest uppercase">
             {MONTHS[month]}
           </p>
-          <p className="font-pixel text-sm sm:text-base text-pixel-black/40">{year}</p>
+          <p className="font-pixel text-xs sm:text-sm text-pixel-black/40">{year}</p>
         </div>
 
         {/* weekday headers + day grid */}
@@ -51,7 +51,7 @@ export default function CalendarCard() {
           {Array.from({ length: firstDay }, (_, i) => {
             const day = prevMonthDays - firstDay + 1 + i;
             return (
-              <span key={`prev-${i}`} className="font-pixel text-sm sm:text-lg py-0.5 sm:py-1 text-pixel-black/20">
+              <span key={`prev-${i}`} className="font-pixel text-xs sm:text-sm py-0.5 text-pixel-black/20">
                 {day}
               </span>
             );
@@ -64,7 +64,7 @@ export default function CalendarCard() {
             return (
               <span
                 key={`cur-${day}`}
-                className={`font-pixel text-sm sm:text-lg py-0.5 sm:py-1 text-pixel-black ${
+                className={`font-pixel text-xs sm:text-sm py-0.5 text-pixel-black ${
                   isToday ? "bg-primary/20 rounded-sm outline outline-1 outline-primary/40" : ""
                 }`}
               >

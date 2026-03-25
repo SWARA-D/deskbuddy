@@ -10,7 +10,7 @@ import BotCard      from "@/components/desk-items/Bot";
 
 // ── position persistence ───────────────────────────────────────────────────────
 
-const POSITIONS_KEY = "deskbuddy_desk_positions_v4";
+const POSITIONS_KEY = "deskbuddy_desk_positions_v5";
 
 type Pos = { x: number; y: number };
 
@@ -45,41 +45,37 @@ function getDefaults(): Record<string, Pos> {
     Math.round(col * (colW + gap) + (colW - w) / 2);
 
   if (cols === 3) {
-    // row2Y must clear scaled calendar bottom:
-    // calendar y:40 + height~310 * maxScale1.2 ≈ 412 → add gap → 480
-    const row2Y = 480;
+    // smaller widgets: calendar ~240px tall at scale 1.0
+    const row2Y = 360;
     return {
-      camera:   { x: itemX(0, 192), y: 80    },  // col 0
-      calendar: { x: itemX(1, 288), y: 40    },  // col 1
-      ipod:     { x: itemX(2, 176), y: 60    },  // col 2
-      journal:  { x: itemX(0, 256), y: row2Y },  // col 0
-      bot:      { x: itemX(2, 160), y: row2Y },  // col 2  (lg:col-start-3, avoids calendar overlap)
+      camera:   { x: itemX(0, 144), y: 80    },  // lg:w-36
+      calendar: { x: itemX(1, 224), y: 40    },  // lg:w-56
+      ipod:     { x: itemX(2, 144), y: 60    },  // lg:w-36
+      journal:  { x: itemX(0, 192), y: row2Y },  // lg:w-48
+      bot:      { x: itemX(2, 112), y: row2Y },  // lg:w-28
     };
   }
 
   if (cols === 2) {
-    // row 1: Camera, Calendar
-    // row 2: iPod, Journal  (starts below Calendar: y:40 + ~310 + gap)
-    // row 3: Bot at col-start-2
-    const row2Y = 390;
-    const row3Y = row2Y + 310;
+    const row2Y = 300;
+    const row3Y = row2Y + 260;
     return {
-      camera:   { x: itemX(0, 192), y: 80    },
-      calendar: { x: itemX(1, 288), y: 40    },
-      ipod:     { x: itemX(0, 176), y: row2Y },
-      journal:  { x: itemX(1, 256), y: row2Y },
-      bot:      { x: itemX(1, 160), y: row3Y },  // sm:col-start-2
+      camera:   { x: itemX(0, 144), y: 80    },
+      calendar: { x: itemX(1, 224), y: 40    },
+      ipod:     { x: itemX(0, 144), y: row2Y },
+      journal:  { x: itemX(1, 192), y: row2Y },
+      bot:      { x: itemX(1, 112), y: row3Y },
     };
   }
 
   // single column — stacked
-  const rowH = 340;
+  const rowH = 270;
   return {
-    camera:   { x: itemX(0, 192), y: 40          },
-    calendar: { x: itemX(0, 288), y: 40 + rowH   },
-    ipod:     { x: itemX(0, 176), y: 40 + rowH*2 },
-    journal:  { x: itemX(0, 256), y: 40 + rowH*3 },
-    bot:      { x: itemX(0, 160), y: 40 + rowH*4 },
+    camera:   { x: itemX(0, 144), y: 40          },
+    calendar: { x: itemX(0, 224), y: 40 + rowH   },
+    ipod:     { x: itemX(0, 144), y: 40 + rowH*2 },
+    journal:  { x: itemX(0, 192), y: 40 + rowH*3 },
+    bot:      { x: itemX(0, 112), y: 40 + rowH*4 },
   };
 }
 
@@ -114,7 +110,8 @@ function DraggableItem({
   const dragging = useRef(false);
   const moved    = useRef(false);
   const origin   = useRef({ mx: 0, my: 0, ix: 0, iy: 0 });
-  const [active, setActive] = useState(false);
+  const [active, setActive]     = useState(false);
+  const [hasMoved, setHasMoved] = useState(false);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -122,6 +119,7 @@ function DraggableItem({
     moved.current    = false;
     origin.current   = { mx: e.clientX, my: e.clientY, ix: pos.x, iy: pos.y };
     setActive(true);
+    setHasMoved(false);
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
   };
 
@@ -129,7 +127,10 @@ function DraggableItem({
     if (!dragging.current) return;
     const dx = e.clientX - origin.current.mx;
     const dy = e.clientY - origin.current.my;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+      moved.current = true;
+      setHasMoved(true);
+    }
     if (moved.current) {
       onMove(id, { x: origin.current.ix + dx, y: origin.current.iy + dy });
     }
@@ -138,6 +139,7 @@ function DraggableItem({
   const onPointerUp = () => {
     dragging.current = false;
     setActive(false);
+    setHasMoved(false);
   };
 
   // capture phase: suppress Link navigation when the pointer actually moved
@@ -168,8 +170,8 @@ function DraggableItem({
       onPointerCancel={onPointerUp}
       onClickCapture={onClickCapture}
     >
-      {/* transparent overlay during drag — locks cursor and blocks child clicks */}
-      {active && (
+      {/* transparent overlay during drag — only shown after movement so it never swallows a plain click */}
+      {active && hasMoved && (
         <div className="absolute z-[200] cursor-grabbing" style={{ inset: "-24px" }} />
       )}
       {children}
@@ -184,7 +186,7 @@ export default function DeskHome() {
   const [scale, setScale] = useState(1);
   useEffect(() => {
     const update = () =>
-      setScale(Math.min(1.2, Math.max(0.85, window.innerWidth / 1100)));
+      setScale(Math.min(1.0, Math.max(0.7, window.innerWidth / 1300)));
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
@@ -193,10 +195,10 @@ export default function DeskHome() {
   // placeholder matches a typical 3-col lg layout; patched after mount
   const [positions, setPositions] = useState<Record<string, Pos>>(() => ({
     camera:   { x: 60,  y: 80  },
-    calendar: { x: 340, y: 40  },
-    ipod:     { x: 680, y: 60  },
-    journal:  { x: 60,  y: 480 },
-    bot:      { x: 680, y: 480 },
+    calendar: { x: 300, y: 40  },
+    ipod:     { x: 580, y: 60  },
+    journal:  { x: 60,  y: 360 },
+    bot:      { x: 580, y: 360 },
   }));
 
   useEffect(() => {

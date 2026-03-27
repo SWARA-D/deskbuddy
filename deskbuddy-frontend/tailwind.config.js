@@ -18,8 +18,8 @@ module.exports = {
         "pixel-black": "#2A2A2A"
       },
       fontFamily: {
-        display: ["Plus Jakarta Sans", "sans-serif"],
-        pixel: ["VT323", "monospace"]
+        display: ["var(--font-display)", "sans-serif"],
+        pixel: ["var(--font-pixel)", "monospace"]
       },
       boxShadow: {
         pixel: "6px 6px 0px rgba(0,0,0,0.15)"

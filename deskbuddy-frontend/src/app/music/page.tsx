@@ -324,7 +324,7 @@ export default function MusicPage() {
               boxShadow:  "0 8px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.8)",
             }}
           >
-            <p className="text-center text-[9px] tracking-[0.3em] text-[#888] font-pixel mb-2 uppercase">
+            <p className="text-center text-xs tracking-[0.3em] text-[#888] font-pixel mb-2 uppercase">
               DeskBuddy
             </p>
 
@@ -377,10 +377,10 @@ export default function MusicPage() {
                   <div className="flex-1 flex flex-col">
                     <div className="flex-1 flex flex-col items-center justify-center px-4 gap-2">
                       <span className="text-3xl">{MOOD_EMOJIS[mood]}</span>
-                      <p className="font-pixel text-[#1a2a12] text-[9px] uppercase tracking-widest text-center leading-tight">
+                      <p className="font-pixel text-[#1a2a12] text-xs uppercase tracking-widest text-center leading-tight">
                         {playlistName || "Loading..."}
                       </p>
-                      <p className="font-pixel text-[#1a2a12]/40 text-[7px] uppercase tracking-wider">
+                      <p className="font-pixel text-[#1a2a12]/40 text-[10px] uppercase tracking-wider">
                         {isPlaying ? "♫ Now playing" : "⏸ Paused"}
                       </p>
                     </div>
@@ -388,14 +388,14 @@ export default function MusicPage() {
                     <div className="flex gap-1 px-2 pb-2 shrink-0">
                       <button
                         onClick={expandToFullscreen}
-                        className="flex-1 bg-[#2d3d24]/20 border border-[#2d3d24]/30 rounded-md py-1.5 font-pixel text-[#1a2a12] text-[8px] uppercase tracking-wider hover:bg-[#2d3d24]/30 transition-all active:scale-95 flex items-center justify-center gap-1"
+                        className="flex-1 bg-[#2d3d24]/20 border border-[#2d3d24]/30 rounded-md py-1.5 font-pixel text-[#1a2a12] text-xs uppercase tracking-wider hover:bg-[#2d3d24]/30 transition-all active:scale-95 flex items-center justify-center gap-1"
                       >
                         <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>fullscreen</span>
                         Expand
                       </button>
                       <button
                         onClick={backToMoods}
-                        className="flex-1 bg-[#2d3d24]/15 border border-[#2d3d24]/25 rounded-md py-1.5 font-pixel text-[#1a2a12] text-[8px] uppercase tracking-wider hover:bg-[#2d3d24]/25 transition-all active:scale-95 flex items-center justify-center gap-1"
+                        className="flex-1 bg-[#2d3d24]/15 border border-[#2d3d24]/25 rounded-md py-1.5 font-pixel text-[#1a2a12] text-xs uppercase tracking-wider hover:bg-[#2d3d24]/25 transition-all active:scale-95 flex items-center justify-center gap-1"
                       >
                         <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>arrow_back</span>
                         Moods

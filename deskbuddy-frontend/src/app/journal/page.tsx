@@ -29,8 +29,9 @@ function displayDate(ymd: string): string {
   });
 }
 
-function draftKey(date: string)    { return `deskbuddy_draft_${date}`; }
-function analysisKey(date: string) { return `deskbuddy_analysis_${date}`; }
+function draftKey(date: string)     { return `deskbuddy_draft_${date}`; }
+function analysisKey(date: string)  { return `deskbuddy_analysis_${date}`; }
+function habitDoneKey(date: string) { return `deskbuddy_habit_done_${date}`; }
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -221,9 +222,17 @@ export default function JournalPage() {
         setMood(data.mood);
         setAiTodos(data.aiTodos);
         setAiHabitIds(new Set(data.aiHabitIds));
-        setHabitDoneToday(new Set(data.habitDoneToday));
+        // habitDoneToday from analysis is a fallback; user's manual state takes priority below
+        setHabitDoneToday(new Set(data.habitDoneToday ?? []));
         setAnalyzed(true);
       } catch { /* ignore */ }
+    }
+
+    // User's manually-saved habit state always wins over the analysis snapshot.
+    const savedHabitDone = localStorage.getItem(habitDoneKey(date));
+    if (savedHabitDone) {
+      try { setHabitDoneToday(new Set(JSON.parse(savedHabitDone) as number[])); }
+      catch { /* ignore */ }
     }
 
     // Always restore local draft first (instant, no flicker).
@@ -347,8 +356,8 @@ export default function JournalPage() {
           .map((h) => h.id)
       );
       setAiHabitIds(matchedIds);
-      const newHabitDone = new Set([...habitDoneToday, ...matchedIds]);
-      setHabitDoneToday(newHabitDone);
+      // Do NOT auto-check habits — only mark them with the ✦ indicator.
+      // The user controls their own habit checkboxes.
 
       const newTodos = (result.suggested_tasks ?? []).map((text, i) => ({
         id: `ai-${Date.now()}-${i}`, text, done: false, aiSuggested: true,
@@ -360,7 +369,7 @@ export default function JournalPage() {
         mood:           result,
         aiTodos:        newTodos,
         aiHabitIds:     [...matchedIds],
-        habitDoneToday: [...newHabitDone],
+        habitDoneToday: [...habitDoneToday],
       }));
 
       setSaving(true);
@@ -388,6 +397,7 @@ export default function JournalPage() {
     setHabitDoneToday((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
+      localStorage.setItem(habitDoneKey(currentDate), JSON.stringify([...next]));
       return next;
     });
 

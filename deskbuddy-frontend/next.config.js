@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://deskbuddy-api.onrender.com";
 
 // Extract the hostname from the API URL for CSP connect-src
-let apiHost = "localhost:8080";
+let apiHost = "deskbuddy-api.onrender.com";
 try {
   apiHost = new URL(API_URL).host;
 } catch {}

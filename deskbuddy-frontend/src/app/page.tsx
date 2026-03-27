@@ -174,6 +174,7 @@ function DraggableItem({
       className="select-none"
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
+      onDragStart={(e) => e.preventDefault()}
     >
       {/* overlay only during active drag — keeps cursor and blocks accidental child hovers */}
       {isDragging && (

@@ -10,9 +10,6 @@ import { randomUUID }                from "crypto";
 import { extractUserFromRequest }     from "@/lib/jwt-server";
 
 // ── In-memory fallback (dev only) ───────────────────────────────────────────
-if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required in production. Set it in your environment.");
-}
 
 type DBEntry = {
   id: string;
@@ -59,6 +56,10 @@ export async function GET(req: NextRequest) {
     }
     const user_id = payload?.sub ?? "local-user";
 
+    if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+      return NextResponse.json({ error: "DATABASE_URL not configured" }, { status: 503 });
+    }
+
     if (!date) {
       return NextResponse.json({ error: "date param required" }, { status: 400 });
     }
@@ -97,6 +98,10 @@ export async function POST(req: NextRequest) {
     const payload = extractUserFromRequest(req);
     if (process.env.JWT_SECRET && !payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+      return NextResponse.json({ error: "DATABASE_URL not configured" }, { status: 503 });
     }
 
     const body = await req.json() as {

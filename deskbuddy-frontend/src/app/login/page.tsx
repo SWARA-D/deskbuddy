@@ -8,12 +8,14 @@ export default function LoginPage() {
   const { login, register, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
-  const [mode,     setMode]     = useState<"login" | "register">("login");
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm,  setConfirm]  = useState("");
-  const [error,    setError]    = useState("");
-  const [busy,     setBusy]     = useState(false);
+  const [mode,        setMode]        = useState<"login" | "register">("login");
+  const [email,       setEmail]       = useState("");
+  const [password,    setPassword]    = useState("");
+  const [confirm,     setConfirm]     = useState("");
+  const [error,       setError]       = useState("");
+  const [busy,        setBusy]        = useState(false);
+  const [showPass,    setShowPass]    = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Already logged in → go home
   useEffect(() => {
@@ -98,29 +100,53 @@ export default function LoginPage() {
 
           <label className="flex flex-col gap-1">
             <span className="font-pixel text-xs uppercase tracking-widest opacity-60 dark:text-[#F5E6D3]">Password</span>
-            <input
-              type="password"
-              required
-              autoComplete={mode === "login" ? "current-password" : "new-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="bg-white/60 dark:bg-black/20 border-2 border-black/10 rounded-lg px-3 py-2 font-display text-sm outline-none focus:border-primary/50 transition-colors dark:text-[#F5E6D3] placeholder:opacity-40"
-            />
+            <div className="relative">
+              <input
+                type={showPass ? "text" : "password"}
+                required
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-white/60 dark:bg-black/20 border-2 border-black/10 rounded-lg px-3 py-2 pr-10 font-display text-sm outline-none focus:border-primary/50 transition-colors dark:text-[#F5E6D3] placeholder:opacity-40"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70 transition-opacity"
+                aria-label={showPass ? "Hide password" : "Show password"}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {showPass ? "visibility_off" : "visibility"}
+                </span>
+              </button>
+            </div>
           </label>
 
           {mode === "register" && (
             <label className="flex flex-col gap-1">
               <span className="font-pixel text-xs uppercase tracking-widest opacity-60 dark:text-[#F5E6D3]">Confirm password</span>
-              <input
-                type="password"
-                required
-                autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="••••••••"
-                className="bg-white/60 dark:bg-black/20 border-2 border-black/10 rounded-lg px-3 py-2 font-display text-sm outline-none focus:border-primary/50 transition-colors dark:text-[#F5E6D3] placeholder:opacity-40"
-              />
+              <div className="relative">
+                <input
+                  type={showConfirm ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-white/60 dark:bg-black/20 border-2 border-black/10 rounded-lg px-3 py-2 pr-10 font-display text-sm outline-none focus:border-primary/50 transition-colors dark:text-[#F5E6D3] placeholder:opacity-40"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70 transition-opacity"
+                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {showConfirm ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
+              </div>
             </label>
           )}
 

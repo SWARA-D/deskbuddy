@@ -46,6 +46,14 @@ def get_db():
 app = FastAPI(title="Tasks Service")
 
 
+@app.on_event("shutdown")
+def shutdown():
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        logger.info("Tasks service: DB connection pool closed")
+
+
 class TaskCreate(BaseModel):
     title: str
     due_at: str
@@ -118,6 +126,7 @@ def health():
 
 @app.post("/tasks")
 def create(t: TaskCreate, x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     tid = str(uuid.uuid4())
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -133,21 +142,45 @@ def create(t: TaskCreate, x_user_id: str = Header()):
 
 
 @app.get("/tasks")
-def list_tasks(x_user_id: str = Header(), limit: int = 50):
-    limit = min(max(1, limit), 200)
+def list_tasks(x_user_id: str = Header(), limit: int = 50, offset: int = 0):
+    _validate_user_id(x_user_id)
+    limit  = min(max(1, limit), 200)
+    offset = max(0, offset)
+
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id,title,due_at,status FROM tasks WHERE user_id=%s ORDER BY due_at LIMIT %s",
-                (x_user_id, limit)
+                "SELECT id, title, due_at, status FROM tasks "
+                "WHERE user_id = %s ORDER BY due_at LIMIT %s OFFSET %s",
+                (x_user_id, limit, offset),
             )
             items = cur.fetchall()
 
-    return {"success": True, "data": {"items": [dict(i) for i in items]}}
+            # Total count for the caller to compute page count
+            cur.execute(
+                "SELECT COUNT(*) AS total FROM tasks WHERE user_id = %s",
+                (x_user_id,),
+            )
+            total = cur.fetchone()["total"]
 
+    has_more = (offset + limit) < total
+    return {
+        "success": True,
+        "data": {
+            "items":    [dict(i) for i in items],
+            "total":    total,
+            "limit":    limit,
+            "offset":   offset,
+            "has_more": has_more,
+        },
+    }
+
+
+ALLOWED_UPDATE_FIELDS = {"status", "title"}
 
 @app.patch("/tasks/{task_id}")
 def update_task(task_id: str, t: TaskUpdate, x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     _validate_uuid(task_id)
 
     fields = {}
@@ -157,6 +190,10 @@ def update_task(task_id: str, t: TaskUpdate, x_user_id: str = Header()):
         fields["title"] = t.title
     if not fields:
         raise HTTPException(400, "No fields to update")
+
+    # Whitelist guard: ensure only known column names enter the SQL fragment
+    if not fields.keys() <= ALLOWED_UPDATE_FIELDS:
+        raise HTTPException(422, "Invalid fields")
 
     set_clause = ", ".join(f"{k} = %s" for k in fields)
     values = list(fields.values()) + [task_id, x_user_id]
@@ -181,6 +218,14 @@ def _validate_uuid(value: str) -> None:
         uuid.UUID(value)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID format")
+
+
+def _validate_user_id(user_id: str) -> None:
+    """Reject x_user_id values that are not valid UUIDs."""
+    try:
+        uuid.UUID(user_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid user identity")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,19 @@ import logging
 
 logger = logging.getLogger("checkin_service")
 
+
+def _validate_user_id(user_id: str) -> None:
+    """Reject x_user_id values that are not valid UUIDs.
+
+    The gateway injects this header after JWT validation, so it must always be
+    a UUID. Accepting arbitrary strings would open the door to data cross-over
+    if the trust model is ever bypassed.
+    """
+    try:
+        uuid.UUID(user_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid user identity")
+
 class Settings(BaseSettings):
     database_url: str = "postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_checkin"
     db_pool_min: int = 1
@@ -49,6 +62,14 @@ def get_db():
 app = FastAPI(title="Checkin Service")
 
 
+@app.on_event("shutdown")
+def shutdown():
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        logger.info("Checkin service: DB connection pool closed")
+
+
 class CheckinCreate(BaseModel):
     checkin_date: str
     caption: Optional[str] = None
@@ -79,6 +100,7 @@ def health():
 
 @app.post("/checkins")
 def checkin(c: CheckinCreate, x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -101,11 +123,13 @@ def checkin(c: CheckinCreate, x_user_id: str = Header()):
 
 @app.get("/checkins/streak")
 def streak(x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     return {"success": True, "data": _compute_streak(x_user_id)}
 
 
 @app.get("/checkins/calendar")
 def calendar(x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(

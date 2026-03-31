@@ -3,11 +3,30 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, field_validator
 from typing import Optional
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import os
 
 app = FastAPI(title="NLP Service")
 analyzer = SentimentIntensityAnalyzer()
 
 MAX_TEXT_LENGTH = 5_000
+
+# Internal API key — set INTERNAL_API_KEY env var in production.
+# Requests without the matching key are rejected with 403.
+_INTERNAL_KEY: Optional[str] = os.environ.get("INTERNAL_API_KEY")
+_APP_ENV: str = os.environ.get("APP_ENV", "development")
+
+if not _INTERNAL_KEY and _APP_ENV == "production":
+    import warnings
+    warnings.warn(
+        "INTERNAL_API_KEY is not set in production. "
+        "Internal endpoints are reachable without authentication.",
+        stacklevel=1,
+    )
+
+
+def _check_internal_key(x_internal_key: Optional[str]) -> None:
+    if _INTERNAL_KEY and x_internal_key != _INTERNAL_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 
 def get_emotion(scores: dict) -> tuple[str, float]:
@@ -57,7 +76,13 @@ def health():
 
 
 @app.post("/nlp/analyze")
-def analyze(req: AnalyzeRequest, x_user_id: str = Header()):
+def analyze(
+    req: AnalyzeRequest,
+    x_user_id: str = Header(),
+    x_internal_key: Optional[str] = Header(default=None),
+):
+    _check_internal_key(x_internal_key)
+
     scores = analyzer.polarity_scores(req.text)
 
     if scores["compound"] >= 0.05:

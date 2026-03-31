@@ -6,12 +6,20 @@
  *   2. HuggingFace Mistral-7B (decent quality, free tier)
  *   3. Keyword analysis (always works, no API key needed)
  *
- * The `_source` field in the response tells the client which tier was used.
+ * The fallback tier used is intentionally not exposed in the response.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { keywordAnalyze } from "@/lib/keyword-analyze";
+import { extractUserFromRequest } from "@/lib/jwt-server";
 import type { MoodResult } from "@/types";
+
+// ── Server-side analysis cache ───────────────────────────────────────────────
+// Keyed by SHA-256 of the trimmed input text.  Prevents re-calling Claude or
+// HuggingFace for identical texts (e.g. repeated autosave triggers).
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const _analysisCache = new Map<string, { result: MoodResult; expiresAt: number }>();
 
 // ── Claude API (primary) ────────────────────────────────────────────────────
 
@@ -115,27 +123,50 @@ Journal entry: """${text}"""
 
 export async function POST(req: NextRequest) {
   try {
+    // Require auth when JWT_SECRET is configured (production).
+    // Protects against anonymous abuse of the AI API budget.
+    if (process.env.JWT_SECRET && !extractUserFromRequest(req)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { text = "" } = (await req.json()) as { text?: string };
 
-    if (!text || text.trim().length < 5) {
+    const trimmed = text.trim();
+    if (!trimmed || trimmed.length < 5) {
       return NextResponse.json({ error: "Entry too short" }, { status: 400 });
     }
+    if (text.length > 50_000) {
+      return NextResponse.json({ error: "Text too long (50 000 character limit)" }, { status: 400 });
+    }
+
+    // Check the server-side cache before hitting any AI API
+    const cacheKey = createHash("sha256").update(trimmed).digest("hex");
+    const cached   = _analysisCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return NextResponse.json(cached.result);
+    }
+
+    // Helper to cache and return a result
+    const cacheAndReturn = (result: MoodResult) => {
+      _analysisCache.set(cacheKey, { result, expiresAt: Date.now() + CACHE_TTL_MS });
+      return NextResponse.json(result);
+    };
 
     // 1. Try Claude (requires ANTHROPIC_API_KEY).
     if (process.env.ANTHROPIC_API_KEY) {
       try {
-        const result = await claudeAnalyze(text);
-        return NextResponse.json({ ...result, _source: "claude" });
+        const result = await claudeAnalyze(trimmed);
+        return cacheAndReturn(result);
       } catch (e) {
-        console.warn("Claude analyze failed, falling back to HF:", e);
+        console.warn("Claude analyze failed, falling back to HF:", e instanceof Error ? e.message : "unknown error");
       }
     }
 
     // 2. Try HuggingFace (requires HUGGINGFACE_API_KEY).
     if (process.env.HUGGINGFACE_API_KEY) {
       try {
-        const result = await hfAnalyze(text);
-        return NextResponse.json({ ...result, _source: "huggingface" });
+        const result = await hfAnalyze(trimmed);
+        return cacheAndReturn(result);
       } catch (e) {
         if (e instanceof Error && e.message === "HF_LOADING") {
           return NextResponse.json(
@@ -143,13 +174,13 @@ export async function POST(req: NextRequest) {
             { status: 503 }
           );
         }
-        console.warn("HF analyze failed, falling back to keywords:", e);
+        console.warn("HF analyze failed, falling back to keywords:", e instanceof Error ? e.message : "unknown error");
       }
     }
 
     // 3. Keyword fallback — always works, no API key needed.
-    const result = keywordAnalyze(text);
-    return NextResponse.json({ ...result, _source: "keyword" });
+    const result = keywordAnalyze(trimmed);
+    return cacheAndReturn(result);
 
   } catch (err) {
     console.error("analyze route error:", err);

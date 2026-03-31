@@ -7,8 +7,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID }                from "crypto";
+import { extractUserFromRequest }     from "@/lib/jwt-server";
 
-// ── In-memory fallback ──────────────────────────────────────────────────────
+// ── In-memory fallback (dev only) ───────────────────────────────────────────
+if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is required in production. Set it in your environment.");
+}
+
 type DBEntry = {
   id: string;
   user_id: string;
@@ -24,11 +29,17 @@ type DBEntry = {
 const MEM: DBEntry[] = [];
 
 // ── Postgres helper ─────────────────────────────────────────────────────────
+// Pool is created once per process and reused across requests.
+// Creating a new Pool on every request would exhaust database connections.
+let _pool: import("pg").Pool | null = null;
+
 async function getPool() {
   if (!process.env.DATABASE_URL) return null;
+  if (_pool) return _pool;
   try {
     const { Pool } = await import("pg");
-    return new Pool({ connectionString: process.env.DATABASE_URL });
+    _pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    return _pool;
   } catch {
     return null;
   }
@@ -38,8 +49,15 @@ async function getPool() {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const date    = searchParams.get("date"); // YYYY-MM-DD
-    const user_id = req.headers.get("x-user-id") ?? "local-user";
+    const date = searchParams.get("date"); // YYYY-MM-DD
+
+    // When JWT_SECRET is configured (production), require a valid token.
+    // In local dev without JWT_SECRET the route falls back to "local-user".
+    const payload = extractUserFromRequest(req);
+    if (process.env.JWT_SECRET && !payload) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const user_id = payload?.sub ?? "local-user";
 
     if (!date) {
       return NextResponse.json({ error: "date param required" }, { status: 400 });
@@ -56,7 +74,7 @@ export async function GET(req: NextRequest) {
          ORDER BY created_at DESC LIMIT 1`,
         [user_id, date]
       );
-      await pool.end();
+
       return NextResponse.json({ entry: rows[0] ?? null });
     }
 
@@ -75,6 +93,12 @@ export async function GET(req: NextRequest) {
 // ── POST — upsert entry for a date ───────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    // Auth check — same rule as GET
+    const payload = extractUserFromRequest(req);
+    if (process.env.JWT_SECRET && !payload) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await req.json() as {
       text?: string;
       input_type?: string;
@@ -87,26 +111,20 @@ export async function POST(req: NextRequest) {
 
     const text       = (body.text ?? "").trim();
     const input_type = body.input_type ?? "typed";
-    const user_id    = req.headers.get("x-user-id") ?? "local-user";
+    const user_id    = payload?.sub ?? "local-user";
     // Use the provided date or fall back to today.
     const entryDate  = body.date ?? new Date().toISOString().slice(0, 10);
 
     if (!text) {
       return NextResponse.json({ error: "Text is required" }, { status: 400 });
     }
+    if (text.length > 50_000) {
+      return NextResponse.json({ error: "Text too long (50 000 character limit)" }, { status: 400 });
+    }
 
     const pool = await getPool();
 
     if (pool) {
-      // Ensure analysis columns exist.
-      await pool.query(`
-        ALTER TABLE journal_entries
-          ADD COLUMN IF NOT EXISTS sentiment    VARCHAR(20),
-          ADD COLUMN IF NOT EXISTS emotion      VARCHAR(32),
-          ADD COLUMN IF NOT EXISTS confidence   FLOAT,
-          ADD COLUMN IF NOT EXISTS mood_summary TEXT
-      `).catch(() => {});
-
       // Check if entry already exists for this date.
       const { rows: existing } = await pool.query(
         `SELECT id FROM journal_entries
@@ -128,7 +146,7 @@ export async function POST(req: NextRequest) {
            body.confidence ?? null, body.mood_summary ?? null,
            existing[0].id]
         );
-        await pool.end();
+  
         return NextResponse.json({ success: true, entry: rows[0] }, { status: 200 });
       }
 
@@ -143,7 +161,7 @@ export async function POST(req: NextRequest) {
          body.sentiment ?? null, body.emotion ?? null,
          body.confidence ?? null, body.mood_summary ?? null]
       );
-      await pool.end();
+
       const entry: DBEntry = { id, user_id, text, input_type, created_at,
         sentiment: body.sentiment, emotion: body.emotion,
         confidence: body.confidence, mood_summary: body.mood_summary };

@@ -6,11 +6,15 @@ from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from jose import jwt, JWTError
+from pydantic import Field
 from pydantic_settings import BaseSettings
+from collections import defaultdict
+import hashlib
 import httpx
 import redis
 import uuid
 import time
+import threading
 from typing import Optional
 import logging
 
@@ -27,8 +31,17 @@ PROXY_TIMEOUT = httpx.Timeout(10.0)
 # Config
 class Settings(BaseSettings):
     # JWT
-    jwt_secret: str = "DEV_SECRET_CHANGE_IN_PRODUCTION"
+    jwt_secret: str = Field(..., min_length=32)  # Required — set JWT_SECRET env var; no default
     jwt_algorithm: str = "HS256"
+
+    # Internal service-to-service API key (optional in dev; set in prod)
+    # Gateway sends this as X-Internal-Key; internal services validate it.
+    internal_api_key: Optional[str] = None
+
+    # Comma-separated list of trusted reverse-proxy IPs whose X-Forwarded-For
+    # header should be honoured.  Leave empty (default) to use the direct
+    # connection IP only.  Example: "10.0.0.1,10.0.0.2"
+    trusted_proxies: str = ""
 
     # Internal service URLs
     auth_service_url: str = "http://auth_service:8001"
@@ -52,16 +65,15 @@ redis_client = redis.from_url(settings.redis_url, decode_responses=True)
 # App
 app = FastAPI(title="DeskBuddy Gateway", version="1.0.0")
 
-# CORS — allow frontend origins only
+# CORS — explicit whitelist only; no regex (regex allows any deskbuddy-*.vercel.app)
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://deskbuddy-gilt.vercel.app",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://deskbuddy-gilt.vercel.app",
-    ],
-    # Covers all Vercel preview deployment URLs
-    allow_origin_regex=r"https://deskbuddy.*\.vercel\.app",
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
@@ -111,15 +123,41 @@ async def global_ip_rate_limit(request: Request, call_next):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_client_ip(request: Request) -> str:
-    """Return real client IP, honouring X-Forwarded-For from trusted proxies."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """Return real client IP.
+
+    X-Forwarded-For is only honoured when the direct connection IP is in the
+    TRUSTED_PROXIES list.  This prevents an attacker from spoofing their IP to
+    bypass per-IP rate limits by crafting a false X-Forwarded-For header.
+    """
+    direct_ip = request.client.host if request.client else "unknown"
+    trusted = {ip.strip() for ip in settings.trusted_proxies.split(",") if ip.strip()}
+    if trusted and direct_ip in trusted:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return direct_ip
+
+
+# In-memory fallback rate limiter — used when Redis is unavailable.
+# Intentionally conservative: limits are the same as Redis limits.
+_fallback_counts: dict = defaultdict(list)
+_fallback_lock = threading.Lock()
+
+
+def _check_rate_limit_memory(key: str, max_requests: int, window: int) -> bool:
+    """Sliding-window in-memory rate limiter. Thread-safe."""
+    now = time.time()
+    with _fallback_lock:
+        hits = [t for t in _fallback_counts[key] if now - t < window]
+        if len(hits) >= max_requests:
+            return False
+        hits.append(now)
+        _fallback_counts[key] = hits
+    return True
 
 
 def _check_rate_limit(key: str, max_requests: int = 10, window: int = 60) -> bool:
-    """Returns True if under limit, False if over. Atomic via Redis INCR + EXPIRE."""
+    """Returns True if under limit, False if over. Uses Redis; falls back to in-memory."""
     try:
         current = redis_client.get(key)
         if current is None:
@@ -130,9 +168,9 @@ def _check_rate_limit(key: str, max_requests: int = 10, window: int = 60) -> boo
         redis_client.incr(key)
         return True
     except Exception:
-        # If Redis is down, fail open (don't block users)
-        logger.warning("Redis unavailable for rate limiting, failing open")
-        return True
+        # Redis unavailable — use in-memory limiter (fail-closed, not fail-open)
+        logger.warning("Redis unavailable, using in-memory rate limiter")
+        return _check_rate_limit_memory(key, max_requests, window)
 
 
 def get_user_id_from_token(request: Request) -> Optional[str]:
@@ -177,6 +215,10 @@ async def proxy_request(
     }
     if user_id:
         headers["X-User-Id"] = user_id
+    # Pass internal API key so downstream services can reject requests that
+    # did not originate from the gateway.
+    if settings.internal_api_key:
+        headers["X-Internal-Key"] = settings.internal_api_key
 
     async with httpx.AsyncClient(timeout=PROXY_TIMEOUT) as client:
         try:
@@ -229,10 +271,18 @@ async def register(request: Request):
 
 @app.post("/auth/login")
 async def login(request: Request):
-    ip = _get_client_ip(request)
-    # 10 login attempts per IP per minute (brute-force protection)
-    _rate_limit_or_raise(f"rl:login:{ip}", max_requests=10, window=60)
+    ip   = _get_client_ip(request)
     body = await request.json()
+
+    # Per-IP: 5 attempts per minute
+    _rate_limit_or_raise(f"rl:login:ip:{ip}", max_requests=5, window=60)
+
+    # Per-account: 5 attempts per 5 minutes (blocks targeted brute-force with rotating IPs)
+    email = body.get("email", "")
+    if email:
+        email_hash = hashlib.sha256(email.strip().lower().encode()).hexdigest()[:16]
+        _rate_limit_or_raise(f"rl:login:email:{email_hash}", max_requests=5, window=300)
+
     return await proxy_request(request, f"{settings.auth_service_url}/auth/login", method="POST", json_body=body)
 
 

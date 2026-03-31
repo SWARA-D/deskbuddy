@@ -46,6 +46,15 @@ def get_db():
 
 app = FastAPI(title="Journal Service")
 
+
+@app.on_event("shutdown")
+def shutdown():
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        logger.info("Journal service: DB connection pool closed")
+
+
 MAX_TEXT_LENGTH = 10_000
 MAX_LIST_LIMIT  = 100
 
@@ -73,6 +82,7 @@ def health():
 
 @app.post("/journal/entries")
 def create_entry(req: CreateEntryRequest, x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     entry_id = str(uuid.uuid4())
 
     with get_db() as conn:
@@ -106,17 +116,62 @@ def create_entry(req: CreateEntryRequest, x_user_id: str = Header()):
 
 
 @app.get("/journal/entries")
-def list_entries(x_user_id: str = Header(), limit: int = 20):
+def list_entries(
+    x_user_id: str = Header(),
+    limit: int = 20,
+    before_id: Optional[str] = None,
+):
+    """
+    Cursor-based pagination via `before_id`.
+
+    - First page: omit `before_id` — returns the N most recent entries.
+    - Subsequent pages: pass `before_id=<last_id_from_previous_page>` to get
+      entries older than that entry.
+    - Response includes `next_cursor` (the id of the last item returned), or
+      null when there are no more pages.
+    """
+    _validate_user_id(x_user_id)
     limit = min(max(1, limit), MAX_LIST_LIMIT)
+
+    if before_id:
+        try:
+            uuid.UUID(before_id)
+        except ValueError:
+            raise HTTPException(400, "before_id must be a valid UUID")
 
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, LEFT(text, 100) as text_preview, sentiment, emotion, created_at "
-                "FROM journal_entries WHERE user_id = %s ORDER BY created_at DESC LIMIT %s",
-                (x_user_id, limit)
-            )
+            if before_id:
+                # Fetch entries with created_at strictly before the cursor entry
+                cur.execute(
+                    """
+                    SELECT id, LEFT(text, 100) AS text_preview, sentiment, emotion, created_at
+                    FROM journal_entries
+                    WHERE user_id = %s
+                      AND created_at < (
+                          SELECT created_at FROM journal_entries
+                          WHERE id = %s AND user_id = %s
+                      )
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (x_user_id, before_id, x_user_id, limit),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, LEFT(text, 100) AS text_preview, sentiment, emotion, created_at
+                    FROM journal_entries
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (x_user_id, limit),
+                )
             items = cur.fetchall()
+
+    # If we received exactly `limit` rows there may be more; surface the cursor.
+    next_cursor = items[-1]["id"] if len(items) == limit else None
 
     return {
         "success": True,
@@ -132,7 +187,7 @@ def list_entries(x_user_id: str = Header(), limit: int = 20):
                 }
                 for r in items
             ],
-            "next_cursor": None,
+            "next_cursor": next_cursor,
         },
         "message": "Entries loaded",
         "status_code": 200,
@@ -141,6 +196,7 @@ def list_entries(x_user_id: str = Header(), limit: int = 20):
 
 @app.get("/journal/entries/{entry_id}")
 def get_entry(entry_id: str, x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     _validate_uuid(entry_id)
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -179,6 +235,7 @@ def get_entry(entry_id: str, x_user_id: str = Header()):
 
 @app.delete("/journal/entries/{entry_id}")
 def delete_entry(entry_id: str, x_user_id: str = Header()):
+    _validate_user_id(x_user_id)
     _validate_uuid(entry_id)
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -197,6 +254,35 @@ def delete_entry(entry_id: str, x_user_id: str = Header()):
 
 # ── NLP integration ───────────────────────────────────────────────────────────
 
+VALID_SENTIMENTS = {"positive", "neutral", "negative"}
+VALID_EMOTIONS   = {"calm", "anxious", "excited", "sad", "angry", "happy",
+                    "hopeful", "overwhelmed", "grateful", "neutral"}
+
+
+class NLPAnalysis(BaseModel):
+    """Schema for the NLP service response — guards against malformed payloads."""
+    sentiment: Optional[str] = None
+    emotion:   Optional[str] = None
+    confidence: Optional[float] = None
+
+    @field_validator("sentiment")
+    @classmethod
+    def coerce_sentiment(cls, v: Optional[str]) -> Optional[str]:
+        return v if v in VALID_SENTIMENTS else None
+
+    @field_validator("emotion")
+    @classmethod
+    def coerce_emotion(cls, v: Optional[str]) -> Optional[str]:
+        return v if v in VALID_EMOTIONS else None
+
+    @field_validator("confidence")
+    @classmethod
+    def clamp_confidence(cls, v: Optional[float]) -> Optional[float]:
+        if v is None:
+            return None
+        return max(0.0, min(1.0, float(v)))
+
+
 def _call_nlp(text: str, entry_id: str, user_id: str) -> Optional[dict]:
     """
     Call the NLP service synchronously, then update the journal entry with the result.
@@ -213,7 +299,14 @@ def _call_nlp(text: str, entry_id: str, user_id: str) -> Optional[dict]:
             logger.warning(f"NLP returned {resp.status_code}")
             return None
 
-        nlp = resp.json().get("data", {})
+        raw = resp.json().get("data", {})
+        # Validate and coerce the NLP response shape to prevent silent data corruption
+        try:
+            nlp = NLPAnalysis(**raw).model_dump(exclude_none=False)
+        except Exception as parse_err:
+            logger.warning(f"NLP response schema error: {parse_err}")
+            return None
+
         _persist_analysis(entry_id, nlp)
         return nlp
 
@@ -238,6 +331,14 @@ def _validate_uuid(value: str) -> None:
         uuid.UUID(value)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid ID format")
+
+
+def _validate_user_id(user_id: str) -> None:
+    """Reject x_user_id values that are not valid UUIDs."""
+    try:
+        uuid.UUID(user_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Invalid user identity")
 
 
 if __name__ == "__main__":

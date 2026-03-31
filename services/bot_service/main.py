@@ -8,11 +8,29 @@ from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings
 from typing import Optional
 import re
+import os
 import logging
 
 logger = logging.getLogger("bot_service")
 
 MAX_MESSAGE_LENGTH = 500
+
+# Internal API key — set INTERNAL_API_KEY env var in production.
+_INTERNAL_KEY: Optional[str] = os.environ.get("INTERNAL_API_KEY")
+_APP_ENV: str = os.environ.get("APP_ENV", "development")
+
+if not _INTERNAL_KEY and _APP_ENV == "production":
+    import warnings
+    warnings.warn(
+        "INTERNAL_API_KEY is not set in production. "
+        "Internal endpoints are reachable without authentication.",
+        stacklevel=1,
+    )
+
+
+def _check_internal_key(x_internal_key: Optional[str]) -> None:
+    if _INTERNAL_KEY and x_internal_key != _INTERNAL_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
 # ── Intent definitions ────────────────────────────────────────────────────────
 
@@ -99,7 +117,12 @@ def health():
 
 
 @app.post("/bot/message")
-def msg(m: BotMsg, x_user_id: str = Header()):
+def msg(
+    m: BotMsg,
+    x_user_id: str = Header(),
+    x_internal_key: Optional[str] = Header(default=None),
+):
+    _check_internal_key(x_internal_key)
     intent, reply, actions = _detect_intent(m.message)
 
     return {

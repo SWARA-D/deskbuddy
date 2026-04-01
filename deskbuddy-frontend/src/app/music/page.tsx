@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import Script from "next/script";
 import DeskLayout from "@/components/layout/DeskLayout";
 import BackButton from "@/components/ui/BackButton";
 import { getPlaylistForMood, type PlaylistInfo } from "@/utils/spotify";
@@ -86,91 +85,14 @@ export default function MusicPage() {
   const [playlistId,   setPlaylistId]   = useState<string | null>(null);
   const [playlistName, setPlaylistName] = useState<string>("");
   const [allPlaylists, setAllPlaylists] = useState<PlaylistInfo[]>([]);
-  const [isPlaying,    setIsPlaying]    = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading,      setLoading]      = useState(false);
   const [animating,    setAnimating]    = useState<"zoom-in" | "zoom-out" | null>(null);
-
-  // ── Spotify IFrame API refs ────────────────────────────────────────────
-  // Refs are used for Spotify controller state so re-renders don't recreate
-  // the embedded iframe unnecessarily.
-  const embedContainerRef = useRef<HTMLDivElement>(null);
-  const controllerRef     = useRef<any>(null);
-  const iframeAPIRef      = useRef<any>(null);
-  const pendingUriRef     = useRef<string | null>(null);
 
   // Stores the pixel coordinates of the iPod screen centre so the zoom
   // animation expands from the right origin point.
   const screenRef   = useRef<HTMLDivElement>(null);
   const [zoomOrigin, setZoomOrigin] = useState({ x: "50%", y: "50%" });
-
-  // ── Spotify IFrame API initialisation ──────────────────────────────────
-
-  /**
-   * Creates or updates the Spotify embed controller for a given playlist URI.
-   * If the API isn't ready yet the URI is stored in `pendingUriRef` and
-   * processed once `onSpotifyIframeApiReady` fires.
-   */
-  const initController = useCallback((uri: string) => {
-    if (!iframeAPIRef.current || !embedContainerRef.current) {
-      pendingUriRef.current = uri;
-      return;
-    }
-
-    if (controllerRef.current) {
-      // Controller already exists — just swap the playlist.
-      controllerRef.current.loadUri(uri);
-      controllerRef.current.play();
-      return;
-    }
-
-    iframeAPIRef.current.createController(
-      embedContainerRef.current,
-      { uri, width: "100%", height: "100%" },
-      (controller: any) => {
-        controllerRef.current = controller;
-        controller.addListener("playback_update", (e: any) => {
-          setIsPlaying(!e.data.isPaused);
-        });
-        controller.play();
-      }
-    );
-  }, []);
-
-  /** Called by the Spotify script tag's `onReady` prop. */
-  function onSpotifyAPIReady() {
-    const win = window as any;
-    if (win.SpotifyIframeApi) {
-      iframeAPIRef.current = win.SpotifyIframeApi;
-      if (pendingUriRef.current) {
-        initController(pendingUriRef.current);
-        pendingUriRef.current = null;
-      }
-    }
-  }
-
-  // Register the global callback the Spotify SDK invokes when loaded.
-  useEffect(() => {
-    const win = window as any;
-    win.onSpotifyIframeApiReady = (IFrameAPI: any) => {
-      iframeAPIRef.current = IFrameAPI;
-      if (pendingUriRef.current) {
-        initController(pendingUriRef.current);
-        pendingUriRef.current = null;
-      }
-    };
-    // Handle hot-reload case where the API was already loaded.
-    if (win.SpotifyIframeApi) iframeAPIRef.current = win.SpotifyIframeApi;
-  }, [initController]);
-
-  // Initialise the Spotify controller whenever the playlist ID changes.
-  useEffect(() => {
-    if (!playlistId) return;
-    const uri   = `spotify:playlist:${playlistId}`;
-    // Small delay ensures the container div is in the DOM before the SDK call.
-    const timer = setTimeout(() => initController(uri), 100);
-    return () => clearTimeout(timer);
-  }, [playlistId, initController]);
 
   // ── Auto-select mood from URL param ────────────────────────────────────
 
@@ -209,7 +131,6 @@ export default function MusicPage() {
   async function selectMood(m: MusicMood) {
     setMood(m);
     setLoading(true);
-    setIsPlaying(false);
 
     calcZoomOrigin();
     setAnimating("zoom-in");
@@ -227,26 +148,19 @@ export default function MusicPage() {
     }
   }
 
-  /** Return to mood selector and destroy the Spotify controller. */
+  /** Return to mood selector. */
   function backToMoods() {
-    if (controllerRef.current) {
-      try { controllerRef.current.destroy(); } catch {}
-      controllerRef.current = null;
-    }
-
     if (isFullscreen) {
       calcZoomOrigin();
       setAnimating("zoom-out");
       setTimeout(() => {
         setIsFullscreen(false);
-        setIsPlaying(false);
         setPlaylistId(null);
         setAllPlaylists([]);
         setMood(null);
         setAnimating(null);
       }, 400);
     } else {
-      setIsPlaying(false);
       setPlaylistId(null);
       setAllPlaylists([]);
       setMood(null);
@@ -265,20 +179,12 @@ export default function MusicPage() {
     setTimeout(() => { setIsFullscreen(true); setAnimating(null); }, 400);
   }
 
-  /** Switch to a specific playlist without reloading the whole mood. */
+  /** Switch to a specific playlist. */
   function switchPlaylist(id: string) {
     const playlist = allPlaylists.find((p) => p.id === id);
     if (!playlist) return;
     setPlaylistId(playlist.id);
     setPlaylistName(playlist.name);
-    setIsPlaying(true);
-    const uri = `spotify:playlist:${playlist.id}`;
-    if (controllerRef.current) {
-      controllerRef.current.loadUri(uri);
-      controllerRef.current.play();
-    } else {
-      initController(uri);
-    }
   }
 
   function prevPlaylist() {
@@ -293,10 +199,6 @@ export default function MusicPage() {
     switchPlaylist(allPlaylists[(idx + 1) % allPlaylists.length].id);
   }
 
-  function togglePlay() {
-    controllerRef.current?.togglePlay();
-  }
-
   // True when a playlist is loaded but the overlay is not fullscreen.
   const showPlaylistInIpod = mood !== null && !isFullscreen;
 
@@ -304,8 +206,6 @@ export default function MusicPage() {
 
   return (
     <DeskLayout>
-      {/* Spotify IFrame API — loaded once; the SDK calls window.onSpotifyIframeApiReady */}
-      <Script src="https://open.spotify.com/embed/iframe-api/v1" onReady={onSpotifyAPIReady} />
 
       <div className="max-w-2xl mx-auto pt-10 px-4 pb-20">
         <BackButton />
@@ -351,7 +251,7 @@ export default function MusicPage() {
                   <span className="font-pixel text-[#1a2a12] text-[10px] uppercase tracking-wide leading-none">
                     {showPlaylistInIpod ? MOOD_DISPLAY[mood] : "PICK A MOOD"}
                   </span>
-                  <SignalBars active={isPlaying} />
+                  <SignalBars active={showPlaylistInIpod} />
                 </div>
 
                 {/* Mood selector grid — shown when no playlist is loaded */}
@@ -375,15 +275,24 @@ export default function MusicPage() {
                 {/* Mini playlist info — shown in iPod view while music plays */}
                 {showPlaylistInIpod && (
                   <div className="flex-1 flex flex-col">
+                    {loading ? (
+                      /* Loading skeleton — pulsing placeholders while playlist resolves */
+                      <div className="flex-1 flex flex-col items-center justify-center px-4 gap-3">
+                        <div className="w-9 h-9 rounded-full bg-[#2d3d24]/20 animate-pulse" />
+                        <div className="w-28 h-2.5 rounded bg-[#2d3d24]/20 animate-pulse" />
+                        <div className="w-16 h-2 rounded bg-[#2d3d24]/10 animate-pulse" />
+                      </div>
+                    ) : (
                     <div className="flex-1 flex flex-col items-center justify-center px-4 gap-2">
                       <span className="text-3xl">{MOOD_EMOJIS[mood]}</span>
                       <p className="font-pixel text-[#1a2a12] text-xs uppercase tracking-widest text-center leading-tight">
-                        {playlistName || "Loading..."}
+                        {playlistName}
                       </p>
                       <p className="font-pixel text-[#1a2a12]/40 text-[10px] uppercase tracking-wider">
-                        {isPlaying ? "♫ Now playing" : "⏸ Paused"}
+                        ♫ Now playing
                       </p>
                     </div>
+                    )}
 
                     <div className="flex gap-1 px-2 pb-2 shrink-0">
                       <button
@@ -437,15 +346,15 @@ export default function MusicPage() {
                     {isFullscreen ? "fullscreen_exit" : "fullscreen"}
                   </span>
                 </button>
-                {/* CENTRE — play / pause */}
+                {/* CENTRE — open fullscreen */}
                 <button
-                  onClick={togglePlay}
-                  aria-label={isPlaying ? "Pause" : "Play"}
+                  onClick={() => mood ? expandToFullscreen() : undefined}
+                  aria-label="Open player"
                   className="w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-90 hover:brightness-95"
                   style={{ background: "linear-gradient(145deg,#d8d8d8,#c0c0c0)", boxShadow: "0 2px 8px rgba(0,0,0,0.15)", color: "#6fa8dc" }}
                 >
                   <span className="material-symbols-outlined text-2xl">
-                    {isPlaying ? "pause" : "play_arrow"}
+                    {mood ? "music_note" : "play_arrow"}
                   </span>
                 </button>
               </div>
@@ -587,9 +496,19 @@ export default function MusicPage() {
             )}
 
             {/* Spotify embed — fills remaining height */}
-            <div className="flex-1 px-6 pb-6 min-h-0" style={{ display: loading ? "none" : undefined }}>
-              <div ref={embedContainerRef} id="spotify-embed" style={{ width: "100%", height: "100%", borderRadius: "16px", overflow: "hidden" }} />
-            </div>
+            {!loading && playlistId && (
+              <div className="flex-1 px-6 pb-6 min-h-0">
+                <iframe
+                  key={playlistId}
+                  src={`https://open.spotify.com/embed/playlist/${playlistId}?utm_source=generator&theme=0`}
+                  width="100%"
+                  height="100%"
+                  style={{ borderRadius: "16px", border: "none", minHeight: "380px" }}
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                  loading="lazy"
+                />
+              </div>
+            )}
 
             {/* Empty state when no playlist could be found */}
             {!loading && !playlistId && (
@@ -615,15 +534,6 @@ export default function MusicPage() {
         </div>
       )}
 
-      {/* Zoom animations for iPod → fullscreen transition */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes zoomIn  { 0%   { opacity:0; transform:scale(0.15); border-radius:16px; }
-                             50%  { opacity:1; }
-                             100% { opacity:1; transform:scale(1);    border-radius:0;    } }
-        @keyframes zoomOut { 0%   { opacity:1; transform:scale(1);    border-radius:0;    }
-                             50%  { opacity:1; }
-                             100% { opacity:0; transform:scale(0.15); border-radius:16px; } }
-      `}} />
     </DeskLayout>
   );
 }

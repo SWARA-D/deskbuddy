@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 
 // Routes that never require authentication
 const PUBLIC_PATHS = ["/login"];
@@ -57,7 +56,7 @@ export function middleware(request: NextRequest) {
   }
 
   // ── 2. Generate a per-request nonce ────────────────────────────────────────
-  const nonce = Buffer.from(randomUUID()).toString("base64");
+  const nonce = btoa(crypto.randomUUID());
 
   // Set nonce on the REQUEST so Server Components can read it via headers().
   const requestHeaders = new Headers(request.headers);

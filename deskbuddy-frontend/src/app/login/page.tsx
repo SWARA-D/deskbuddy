@@ -5,6 +5,26 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 
+// ── Security helpers ─────────────────────────────────────────────────────────
+
+/** Strip HTML tags and common XSS patterns from any text input. */
+function sanitize(value: string): string {
+  return value
+    .trim()
+    .replace(/<[^>]*>/g, "")          // strip HTML tags
+    .replace(/javascript:/gi, "")     // strip javascript: URIs
+    .replace(/on\w+\s*=/gi, "");      // strip inline event handlers
+}
+
+/** SHA-256 hash a password so it is never sent in plain text over the wire. */
+async function hashPassword(password: string): Promise<string> {
+  const encoded = new TextEncoder().encode(password);
+  const buffer  = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 export default function LoginPage() {
   const { login, register, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -27,6 +47,7 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
+    // Validate before hashing
     if (mode === "register") {
       if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
       if (password !== confirm) { setError("Passwords do not match."); return; }
@@ -34,10 +55,13 @@ export default function LoginPage() {
 
     setBusy(true);
     try {
+      const cleanEmail    = sanitize(email);
+      const hashedPassword = await hashPassword(password);
+
       if (mode === "login") {
-        await login(email, password);
+        await login(cleanEmail, hashedPassword);
       } else {
-        await register(email, password);
+        await register(cleanEmail, hashedPassword);
       }
       window.location.href = "/";
     } catch (err: any) {

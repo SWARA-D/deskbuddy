@@ -176,34 +176,33 @@ def list_tasks(x_user_id: str = Header(), limit: int = 50, offset: int = 0):
     }
 
 
-ALLOWED_UPDATE_FIELDS = {"status", "title"}
-
 @app.patch("/tasks/{task_id}")
 def update_task(task_id: str, t: TaskUpdate, x_user_id: str = Header()):
     _validate_user_id(x_user_id)
     _validate_uuid(task_id)
 
-    fields = {}
-    if t.status is not None:
-        fields["status"] = t.status
-    if t.title is not None:
-        fields["title"] = t.title
-    if not fields:
+    if t.status is None and t.title is None:
         raise HTTPException(400, "No fields to update")
 
-    # Whitelist guard: ensure only known column names enter the SQL fragment
-    if not fields.keys() <= ALLOWED_UPDATE_FIELDS:
-        raise HTTPException(422, "Invalid fields")
-
-    set_clause = ", ".join(f"{k} = %s" for k in fields)
-    values = list(fields.values()) + [task_id, x_user_id]
-
+    # Use explicit SQL branches for each allowed field to eliminate any risk
+    # of column-name injection through the dynamic SET clause.
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                f"UPDATE tasks SET {set_clause} WHERE id = %s AND user_id = %s RETURNING id,title,due_at,status",
-                values
-            )
+            if t.status is not None and t.title is not None:
+                cur.execute(
+                    "UPDATE tasks SET status = %s, title = %s WHERE id = %s AND user_id = %s RETURNING id,title,due_at,status",
+                    (t.status, t.title, task_id, x_user_id),
+                )
+            elif t.status is not None:
+                cur.execute(
+                    "UPDATE tasks SET status = %s WHERE id = %s AND user_id = %s RETURNING id,title,due_at,status",
+                    (t.status, task_id, x_user_id),
+                )
+            else:
+                cur.execute(
+                    "UPDATE tasks SET title = %s WHERE id = %s AND user_id = %s RETURNING id,title,due_at,status",
+                    (t.title, task_id, x_user_id),
+                )
             updated = cur.fetchone()
             conn.commit()
 

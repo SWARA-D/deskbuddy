@@ -99,6 +99,22 @@ class RefreshRequest(BaseModel):
 app = FastAPI(title="Auth Service", version="1.0.0")
 
 
+@app.on_event("startup")
+def ensure_token_version_column():
+    """Add token_version column if it doesn't exist (safe migration)."""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0
+                """)
+                conn.commit()
+        logger.info("token_version column ensured")
+    except Exception as e:
+        logger.warning(f"Could not ensure token_version column: {e}")
+
+
 @app.on_event("shutdown")
 def shutdown():
     global _pool
@@ -132,7 +148,7 @@ def register(req: RegisterRequest):
         "success": True,
         "data": {
             "user": {"id": user["id"], "email": user["email"], "created_at": user["created_at"].isoformat()},
-            "tokens": {"access_token": _make_token(user["id"]), "expires_in": settings.access_token_expire_minutes * 60},
+            "tokens": {"access_token": _make_token(user["id"], version=0), "expires_in": settings.access_token_expire_minutes * 60},
         },
         "message": "Registered successfully",
         "status_code": 201,
@@ -144,27 +160,28 @@ def login(req: LoginRequest):
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, email, password_hash, created_at FROM users WHERE email = %s",
+                "SELECT id, email, password_hash, created_at, token_version FROM users WHERE email = %s",
                 (req.email,)
             )
             user = cur.fetchone()
 
-    # Always run bcrypt to prevent timing-based user enumeration
-    # Must be a complete 60-char bcrypt hash, not just the salt prefix
+    # Always run bcrypt to prevent timing-based user enumeration.
+    # We verify against the real hash when the user exists, or against a dummy
+    # hash when they don't — exactly one bcrypt call either way.
     dummy_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TiGRvGsqzxqWqIuBfBWKtqVPKsz."
+    candidate_hash = user["password_hash"] if user else dummy_hash
     try:
-        pwd_context.verify(req.password, user["password_hash"] if user else dummy_hash)
+        ok = pwd_context.verify(req.password, candidate_hash)
     except ValueError:
-        pass  # dummy hash may not verify — that's fine, we check user below
-
-    if not user or not pwd_context.verify(req.password, user["password_hash"]):
+        ok = False
+    if not user or not ok:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     return {
         "success": True,
         "data": {
             "user": {"id": user["id"], "email": user["email"], "created_at": user["created_at"].isoformat()},
-            "tokens": {"access_token": _make_token(user["id"]), "expires_in": settings.access_token_expire_minutes * 60},
+            "tokens": {"access_token": _make_token(user["id"], version=user.get("token_version", 0)), "expires_in": settings.access_token_expire_minutes * 60},
         },
         "message": "Login successful",
         "status_code": 200,
@@ -184,6 +201,7 @@ def refresh(req: RefreshRequest):
         )
         user_id = payload.get("sub")
         iat = payload.get("iat", 0)
+        token_ver = payload.get("ver", 0)
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
         if datetime.utcnow().timestamp() - iat > MAX_REFRESH_AGE_SECONDS:
@@ -193,21 +211,55 @@ def refresh(req: RefreshRequest):
 
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id FROM users WHERE id = %s", (user_id,))
-            if not cur.fetchone():
+            cur.execute("SELECT id, token_version FROM users WHERE id = %s", (user_id,))
+            db_user = cur.fetchone()
+            if not db_user:
                 raise HTTPException(status_code=401, detail="User not found")
+            current_version = db_user.get("token_version", 0)
+
+    if token_ver != current_version:
+        raise HTTPException(status_code=401, detail="Token has been revoked")
 
     return {
         "success": True,
-        "data": {"access_token": _make_token(user_id), "expires_in": settings.access_token_expire_minutes * 60},
+        "data": {"access_token": _make_token(user_id, version=current_version), "expires_in": settings.access_token_expire_minutes * 60},
         "message": "Token refreshed",
         "status_code": 200,
     }
 
 
-def _make_token(user_id: str) -> str:
+@app.post("/auth/logout-all")
+def logout_all(req: RefreshRequest):
+    """Invalidate all outstanding tokens for a user by bumping token_version."""
+    try:
+        payload = jwt.decode(
+            req.access_token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+            options={"verify_exp": False},
+        )
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET token_version = token_version + 1 WHERE id = %s RETURNING token_version",
+                (user_id,),
+            )
+            result = cur.fetchone()
+            conn.commit()
+    if not result:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"success": True, "message": "All sessions invalidated"}
+
+
+def _make_token(user_id: str, version: int = 0) -> str:
     return jwt.encode(
-        {"sub": user_id, "exp": datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes), "iat": datetime.utcnow()},
+        {"sub": user_id, "ver": version, "exp": datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes), "iat": datetime.utcnow()},
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )

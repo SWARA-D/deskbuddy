@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const timestamp = Math.round(Date.now() / 1000);
-    const folder    = "deskbuddy";
+    const folder    = `deskbuddy/${userId}`;
     // Cloudinary signed-upload signature: alphabetical params + secret
     const toSign    = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
     const signature = createHash("sha1").update(toSign).digest("hex");

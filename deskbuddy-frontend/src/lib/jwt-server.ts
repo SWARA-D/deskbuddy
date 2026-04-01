@@ -45,6 +45,8 @@ export function verifyJWT(token: string | null | undefined): JWTPayload {
   ) as JWTPayload;
 
   if (!decoded.sub) throw new Error("Missing sub claim");
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_RE.test(decoded.sub)) throw new Error("Invalid sub claim format");
   if (!decoded.exp || Math.floor(Date.now() / 1000) > decoded.exp) {
     throw new Error("Token expired");
   }

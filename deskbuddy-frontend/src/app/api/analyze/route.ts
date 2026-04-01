@@ -21,6 +21,16 @@ import type { MoodResult } from "@/types";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const _analysisCache = new Map<string, { result: MoodResult; expiresAt: number }>();
 
+// Evict expired entries every 10 minutes to prevent unbounded memory growth.
+if (typeof setInterval !== "undefined") {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of _analysisCache) {
+      if (now >= val.expiresAt) _analysisCache.delete(key);
+    }
+  }, 10 * 60 * 1000);
+}
+
 // ── Claude API (primary) ────────────────────────────────────────────────────
 
 /**

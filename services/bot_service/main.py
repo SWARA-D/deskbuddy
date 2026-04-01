@@ -37,13 +37,13 @@ def _check_internal_key(x_internal_key: Optional[str]) -> None:
 INTENTS = [
     {
         "name": "add_task",
-        "patterns": [r"\badd\b.*\btask\b", r"\bcreate\b.*\btask\b", r"\bnew task\b", r"\bremind me\b"],
+        "patterns": [r"\badd\b.{0,100}\btask\b", r"\bcreate\b.{0,100}\btask\b", r"\bnew task\b", r"\bremind me\b"],
         "reply": "📝 To add a task, head to the **Focus** page and tap the + button. You can set a title, due date, and difficulty level!",
         "actions": ["navigate:/tasks"],
     },
     {
         "name": "show_tasks",
-        "patterns": [r"\b(my\s+)?tasks?\b", r"\bto.?do\b", r"\bwhat.*(do|need).*today\b"],
+        "patterns": [r"\b(my\s+)?tasks?\b", r"\bto.?do\b", r"\bwhat.{0,50}(do|need).{0,50}today\b"],
         "reply": "📋 Your tasks are on the **Focus** page. I can see them once you head over there!",
         "actions": ["navigate:/tasks"],
     },
@@ -67,7 +67,7 @@ INTENTS = [
     },
     {
         "name": "mood",
-        "patterns": [r"\b(how|what).*(feel|mood|emotion)\b", r"\bfeeling\b", r"\bemotion\b"],
+        "patterns": [r"\b(how|what).{0,50}(feel|mood|emotion)\b", r"\bfeeling\b", r"\bemotion\b"],
         "reply": "💭 Not sure how you're feeling? Try writing in your **Journal** — the AI will analyse your mood and suggest music or tasks to match!",
         "actions": ["navigate:/journal"],
     },

@@ -20,13 +20,10 @@ function getApiHost(): string {
 }
 
 /**
- * Build a per-request Content-Security-Policy that includes a nonce.
- *
- * Including 'nonce-{nonce}' alongside 'unsafe-inline' gives a migration
- * path: CSP Level 2+ browsers ignore 'unsafe-inline' when a nonce is
- * present, so they require the nonce on every inline script.  Older
- * browsers fall back to 'unsafe-inline'.  Once the root layout propagates
- * the nonce to all inline <script> tags, 'unsafe-inline' can be removed.
+ * Build the Content-Security-Policy header.
+ * Uses 'unsafe-inline' for script-src since Next.js injects inline scripts
+ * during hydration. Journal text is never rendered as raw HTML (React escapes
+ * all output by default), so the XSS risk from 'unsafe-inline' is low.
  */
 function buildCsp(): string {
   const isDev   = process.env.NODE_ENV === "development";

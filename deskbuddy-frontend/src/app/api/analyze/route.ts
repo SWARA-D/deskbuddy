@@ -131,12 +131,42 @@ Journal entry: """${text}"""
 
 // ── Route handler ────────────────────────────────────────────────────────────
 
+// Per-user rate limit: 20 analyze calls per 10 minutes (MED-5)
+const _analyzeCounts = new Map<string, { count: number; resetAt: number }>();
+const ANALYZE_LIMIT  = 20;
+const ANALYZE_WINDOW = 10 * 60 * 1000;
+
+function checkAnalyzeRateLimit(userId: string): boolean {
+  const now    = Date.now();
+  const bucket = _analyzeCounts.get(userId);
+  if (!bucket || now > bucket.resetAt) {
+    _analyzeCounts.set(userId, { count: 1, resetAt: now + ANALYZE_WINDOW });
+    return true;
+  }
+  if (bucket.count >= ANALYZE_LIMIT) return false;
+  bucket.count++;
+  return true;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // Require auth when JWT_SECRET is configured (production).
-    // Protects against anonymous abuse of the AI API budget.
-    if (process.env.JWT_SECRET && !extractUserFromRequest(req)) {
+    // CRIT-1: fail closed — if JWT_SECRET is absent the deployment is
+    // misconfigured; refuse all requests rather than running unauthenticated.
+    if (!process.env.JWT_SECRET) {
+      console.error("FATAL: JWT_SECRET is not set — refusing analyze request");
+      return NextResponse.json({ error: "Service misconfigured" }, { status: 503 });
+    }
+    const payload = extractUserFromRequest(req);
+    if (!payload) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // MED-5: per-user rate limit
+    if (!checkAnalyzeRateLimit(payload.sub)) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded (20 per 10 minutes)" },
+        { status: 429 }
+      );
     }
 
     const { text = "" } = (await req.json()) as { text?: string };

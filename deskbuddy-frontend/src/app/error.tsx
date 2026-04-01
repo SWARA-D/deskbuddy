@@ -14,7 +14,8 @@ export default function GlobalError({
           <div className="flex flex-col items-center gap-6 text-center px-6 max-w-md">
             <span className="font-pixel text-5xl">:(</span>
             <h2 className="font-pixel text-lg uppercase tracking-widest">Something went wrong</h2>
-            {error.message && (
+            {/* MED-1: only show error details in dev — avoid leaking internals in production */}
+            {process.env.NODE_ENV !== "production" && error.message && (
               <p className="font-pixel text-xs opacity-50 uppercase tracking-wider">{error.message}</p>
             )}
             <button

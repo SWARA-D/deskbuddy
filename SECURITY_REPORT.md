@@ -398,3 +398,87 @@ All open security findings from the 2026-04-01 review were resolved in a single 
 
 ### `.env.example`
 - **New env var documentation:** Added `APP_ENV` and `TRUSTED_PROXIES` entries with explanatory comments at the top of the file, consistent with their usage in `bot_service`, `nlp_service`, `music_service`, and `gateway`.
+
+---
+
+## Security Review — 2026-04-01 (Session 2)
+
+**Scope:** UI/UX audit changes merged in this session. Files examined:
+`Header.tsx` · `page.tsx` · `tasks/page.tsx` · `checkin/page.tsx` · `loading.tsx` · `error.tsx` ·
+`Footer.tsx` · `lib/storage-keys.ts` · `journal/page.tsx` · `lib/api.ts` · `lib/auth.tsx` ·
+`api/analyze/route.ts` · `api/upload/image/route.ts` · `middleware.ts`
+
+---
+
+### New Security Findings
+
+| ID | Severity | File | Issue |
+|----|----------|------|-------|
+| CRIT-1 | CRITICAL | `api/analyze/route.ts`, `api/upload/image/route.ts` | Auth skipped when `JWT_SECRET` not set (fail-open) |
+| HIGH-1 | HIGH | `middleware.ts` | Open redirect via unvalidated `next` param |
+| HIGH-4 | HIGH | `lib/auth.tsx` | JWT duplicated to `localStorage` (XSS-accessible) |
+| MED-1 | MEDIUM | `app/error.tsx` | Raw `error.message` exposed in production UI |
+| MED-2 | MEDIUM | `app/tasks/page.tsx` | `returnTo` param used as router target without validation |
+| MED-3 | MEDIUM | `middleware.ts` | CSP uses `'unsafe-inline'` for `script-src` |
+| MED-5 | MEDIUM | `api/analyze/route.ts` | No rate limiting on AI analysis endpoint |
+| LOW-4 | LOW | `middleware.ts` | CSP `connect-src` included AI API hosts unnecessarily |
+| INFO-2 | INFO | `api/upload/image/route.ts` | Cloudinary `public_id` returned unnecessarily |
+| INFO-3 | INFO | `middleware.ts` | Missing `Permissions-Policy` and `X-XSS-Protection: 0` headers |
+
+---
+
+### Fixes Applied — 2026-04-01 (Session 2)
+
+#### CRIT-1 — Fail closed when `JWT_SECRET` not set
+**Files:** `api/analyze/route.ts`, `api/upload/image/route.ts`
+
+Both routes previously only enforced auth when `JWT_SECRET` was present (`if (process.env.JWT_SECRET && !payload)`), silently running unauthenticated when the env var was absent. Changed to fail closed: if `JWT_SECRET` is not set, return HTTP 503 "Service misconfigured" immediately. A missing secret is a deployment error, not a valid operating mode.
+
+#### HIGH-1 — Open redirect via unvalidated `next` param
+**File:** `middleware.ts`
+
+The middleware unconditionally appended the raw `pathname` as a `next` query param before redirecting to `/login`. Added a same-origin check: `next` is only forwarded when `pathname.startsWith("/") && !pathname.startsWith("//")`.
+
+#### MED-1 — Raw `error.message` in production UI
+**File:** `app/error.tsx`
+
+Error details are now only rendered in development (`process.env.NODE_ENV !== "production"`). Production users see a generic styled error screen without implementation details.
+
+#### MED-2 — `returnTo` open redirect
+**File:** `app/tasks/page.tsx`
+
+`returnTo` query param now validated: only accepted if it starts with `/` and not `//`. Invalid values are silently ignored (treated as null) rather than followed.
+
+#### MED-5 — Rate limiting on `/api/analyze`
+**File:** `api/analyze/route.ts`
+
+Added per-user in-process rate limiter: 20 requests per 10-minute window. Returns HTTP 429 when exceeded. Uses the same bucket pattern as the upload route.
+
+#### LOW-4 — Unnecessary AI hosts in CSP `connect-src`
+**File:** `middleware.ts`
+
+Removed `https://api-inference.huggingface.co` and `https://api.anthropic.com` from `connect-src`. These are server-to-server calls from Next.js API routes — they do not require browser-level network permission.
+
+#### INFO-2 — `public_id` removed from upload response
+**File:** `api/upload/image/route.ts`
+
+Route now returns only `{ url }` instead of `{ url, public_id }`. The Cloudinary `public_id` is an internal resource identifier not needed by the client.
+
+#### INFO-3 — Added `Permissions-Policy` and `X-XSS-Protection` headers
+**File:** `middleware.ts`
+
+Added:
+- `Permissions-Policy: camera=(self), microphone=(self), geolocation=()` — restricts webcam/mic to same-origin requests, disables geolocation entirely
+- `X-XSS-Protection: 0` — explicitly disables the legacy IE XSS filter (which can itself be exploited in some scenarios)
+
+---
+
+### Remaining Open Findings
+
+| ID | Severity | Issue | Disposition |
+|----|----------|-------|-------------|
+| HIGH-2 | HIGH | In-memory rate limiter resets per-process in serverless | Acceptable: document limitation; Redis upgrade path identified |
+| HIGH-4 | HIGH | JWT in `localStorage` accessible to XSS | Architectural: requires routing all gateway calls through BFF |
+| MED-3 | MEDIUM | `script-src 'unsafe-inline'` in CSP | Requires nonce migration (Next.js App Router) — complex, tracked separately |
+| LOW-2 | LOW | Malformed token silently skips refresh | Low impact; session expires gracefully |
+| INFO-1 | INFO | Sensitive wellness data in `localStorage` not cleared on logout | UX consideration; document recommendation |

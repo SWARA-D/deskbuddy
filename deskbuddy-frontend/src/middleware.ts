@@ -36,7 +36,8 @@ function buildCsp(): string {
       : "script-src 'self' 'unsafe-inline' https://open.spotify.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    `connect-src 'self' https://${apiHost} https://open.spotify.com https://api.spotify.com https://accounts.spotify.com https://api-inference.huggingface.co https://api.anthropic.com`,
+    // LOW-4: AI API calls are server-to-server only — omit from browser connect-src
+    `connect-src 'self' https://${apiHost} https://open.spotify.com https://api.spotify.com https://accounts.spotify.com`,
     "img-src 'self' data: blob: https://i.scdn.co https://res.cloudinary.com",
     "frame-src https://open.spotify.com",
     "media-src 'self' blob:",
@@ -70,7 +71,10 @@ export function middleware(request: NextRequest) {
     response = NextResponse.next();
   } else if (!token) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
+    // HIGH-1: only forward same-origin relative paths as the post-login redirect
+    if (pathname.startsWith("/") && !pathname.startsWith("//")) {
+      loginUrl.searchParams.set("next", pathname);
+    }
     return NextResponse.redirect(loginUrl);
   } else {
     response = NextResponse.next();
@@ -81,6 +85,10 @@ export function middleware(request: NextRequest) {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  // INFO-3: restrict browser features to same-origin only
+  response.headers.set("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()");
+  // Disable legacy IE XSS filter (modern browsers ignore it; old IE's version can be exploited)
+  response.headers.set("X-XSS-Protection", "0");
   return response;
 }
 

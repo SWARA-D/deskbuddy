@@ -114,7 +114,7 @@ describe("auth enforcement (JWT_SECRET set)", () => {
   });
 
   it("GET returns 401 with an expired token", async () => {
-    const token = expiredJWT("user-expired-test");
+    const token = expiredJWT("a0000000-0000-0000-0000-000000000099");
     const res   = await GET(makeGet({ date: "2030-01-03" }, token));
     expect(res.status).toBe(401);
   });
@@ -122,7 +122,7 @@ describe("auth enforcement (JWT_SECRET set)", () => {
   it("GET returns 401 with a token signed by a different secret", async () => {
     // Sign with a different secret — should fail signature check
     const header    = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-    const payload   = Buffer.from(JSON.stringify({ sub: "hacker", exp: 9999999999, iat: 1 })).toString("base64url");
+    const payload   = Buffer.from(JSON.stringify({ sub: "a0000000-0000-0000-0000-000000000000", exp: 9999999999, iat: 1 })).toString("base64url");
     const wrongSign = createHmac("sha256", "wrong-secret-completely-different!!")
       .update(`${header}.${payload}`)
       .digest("base64url");
@@ -138,14 +138,14 @@ describe("auth enforcement (JWT_SECRET set)", () => {
   });
 
   it("POST succeeds with a valid token and returns 201", async () => {
-    const userId = "00000000-auth-test-0000-000000000001";
+    const userId = "a0000000-0000-0000-0000-000000000001";
     const token  = makeTestJWT(userId);
     const res    = await POST(makePost({ text: "Valid authenticated entry.", date: "2030-02-01" }, token));
     expect(res.status).toBe(201);
   });
 
   it("GET returns the entry created by its owner", async () => {
-    const userId = "00000000-auth-test-0000-000000000002";
+    const userId = "a0000000-0000-0000-0000-000000000002";
     const token  = makeTestJWT(userId);
     await POST(makePost({ text: "Owner's own journal entry.", date: "2030-02-02" }, token));
 

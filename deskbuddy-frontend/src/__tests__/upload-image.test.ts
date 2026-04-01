@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { createHmac } from "crypto";
+import { createHmac, randomUUID } from "crypto";
 import { POST } from "@/app/api/upload/image/route";
 import { NextRequest } from "next/server";
 
@@ -74,32 +74,43 @@ describe("POST /api/upload/image — auth enforcement", () => {
 // ── Input validation ──────────────────────────────────────────────────────────
 
 describe("POST /api/upload/image — input validation", () => {
-  // No JWT_SECRET in these tests — auth is skipped
+  // JWT_SECRET must be set and a valid token provided (CRIT-1 fail-closed)
+  const ORIGINAL_JWT = process.env.JWT_SECRET;
+  let validToken: string;
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = TEST_SECRET;
+    validToken = makeTestJWT(randomUUID());
+  });
+  afterEach(() => {
+    if (ORIGINAL_JWT === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = ORIGINAL_JWT;
+  });
 
   it("returns 400 when body is missing the data field", async () => {
-    const res = await POST(makePost({}));
+    const res = await POST(makePost({}, validToken));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 for a plain text string (not a data URL)", async () => {
-    const res = await POST(makePost({ data: "not-a-data-url" }));
+    const res = await POST(makePost({ data: "not-a-data-url" }, validToken));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 for a non-image data URL", async () => {
-    const res = await POST(makePost({ data: "data:text/html;base64,PHNjcmlwdD4=" }));
+    const res = await POST(makePost({ data: "data:text/html;base64,PHNjcmlwdD4=" }, validToken));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 for an empty data field", async () => {
-    const res = await POST(makePost({ data: "" }));
+    const res = await POST(makePost({ data: "" }, validToken));
     expect(res.status).toBe(400);
   });
 
   it("returns 413 when the data URL exceeds 10 MB", async () => {
     // 10 MB + 1 byte of padding to trigger the limit
     const huge = "data:image/jpeg;base64," + "A".repeat(10 * 1024 * 1024 + 1);
-    const res  = await POST(makePost({ data: huge }));
+    const res  = await POST(makePost({ data: huge }, validToken));
     expect(res.status).toBe(413);
   });
 });
@@ -107,24 +118,29 @@ describe("POST /api/upload/image — input validation", () => {
 // ── Cloudinary not configured ─────────────────────────────────────────────────
 
 describe("POST /api/upload/image — Cloudinary not configured", () => {
-  const ORIG_NAME   = process.env.CLOUDINARY_CLOUD_NAME;
-  const ORIG_KEY    = process.env.CLOUDINARY_API_KEY;
-  const ORIG_SECRET = process.env.CLOUDINARY_API_SECRET;
+  const ORIG_NAME    = process.env.CLOUDINARY_CLOUD_NAME;
+  const ORIG_KEY     = process.env.CLOUDINARY_API_KEY;
+  const ORIG_SECRET  = process.env.CLOUDINARY_API_SECRET;
+  const ORIGINAL_JWT = process.env.JWT_SECRET;
 
   beforeEach(() => {
+    // Auth must be configured (CRIT-1 fail-closed); Cloudinary creds absent
+    process.env.JWT_SECRET = TEST_SECRET;
     delete process.env.CLOUDINARY_CLOUD_NAME;
     delete process.env.CLOUDINARY_API_KEY;
     delete process.env.CLOUDINARY_API_SECRET;
   });
   afterEach(() => {
-    if (ORIG_NAME   !== undefined) process.env.CLOUDINARY_CLOUD_NAME  = ORIG_NAME;
-    if (ORIG_KEY    !== undefined) process.env.CLOUDINARY_API_KEY     = ORIG_KEY;
-    if (ORIG_SECRET !== undefined) process.env.CLOUDINARY_API_SECRET  = ORIG_SECRET;
+    if (ORIGINAL_JWT  !== undefined) process.env.JWT_SECRET             = ORIGINAL_JWT;  else delete process.env.JWT_SECRET;
+    if (ORIG_NAME     !== undefined) process.env.CLOUDINARY_CLOUD_NAME  = ORIG_NAME;     else delete process.env.CLOUDINARY_CLOUD_NAME;
+    if (ORIG_KEY      !== undefined) process.env.CLOUDINARY_API_KEY     = ORIG_KEY;      else delete process.env.CLOUDINARY_API_KEY;
+    if (ORIG_SECRET   !== undefined) process.env.CLOUDINARY_API_SECRET  = ORIG_SECRET;   else delete process.env.CLOUDINARY_API_SECRET;
   });
 
   it("returns 503 with a descriptive error when credentials are missing", async () => {
-    const res  = await POST(makePost({ data: VALID_DATA_URL }));
-    const json = await res.json();
+    const token = makeTestJWT(randomUUID());
+    const res   = await POST(makePost({ data: VALID_DATA_URL }, token));
+    const json  = await res.json();
     expect(res.status).toBe(503);
     expect(json.error).toMatch(/not configured/i);
   });
@@ -133,9 +149,9 @@ describe("POST /api/upload/image — Cloudinary not configured", () => {
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 
 describe("POST /api/upload/image — rate limiting", () => {
-  // Use a unique per-run user ID so the bucket is fresh every time this
-  // test file runs (the Map is module-level and persists within a process).
-  const RATE_USER    = `rate-limit-upload-user-${Date.now()}-${Math.random()}`;
+  // Use a unique per-run UUID so the rate-limit bucket is fresh every run
+  // (the Map is module-level and persists within a process).
+  const RATE_USER = randomUUID();
   const ORIGINAL_JWT = process.env.JWT_SECRET;
 
   beforeEach(() => { process.env.JWT_SECRET = TEST_SECRET; });
@@ -191,8 +207,8 @@ describe("POST /api/upload/image — successful upload", () => {
   });
 
   it("returns { url, public_id } on a successful Cloudinary upload", async () => {
-    // Use a fresh unique user so the rate limit bucket is empty
-    const user  = `upload-success-user-${Date.now()}-${Math.random()}`;
+    // Use a fresh UUID so the rate limit bucket is empty
+    const user  = randomUUID();
     const token = makeTestJWT(user);
     process.env.JWT_SECRET = TEST_SECRET;
 
@@ -201,8 +217,8 @@ describe("POST /api/upload/image — successful upload", () => {
 
     expect(res.status).toBe(200);
     expect(json.url).toMatch(/^https:\/\/res\.cloudinary\.com\//);
-    expect(typeof json.public_id).toBe("string");
-    expect(json.public_id.length).toBeGreaterThan(0);
+    // INFO-2: public_id is intentionally not returned to the client
+    expect(json.public_id).toBeUndefined();
 
     delete process.env.JWT_SECRET;
   });
@@ -217,7 +233,7 @@ describe("POST /api/upload/image — successful upload", () => {
     });
     vi.stubGlobal("fetch", capturedFetch);
 
-    const user  = `upload-url-check-user-${Date.now()}-${Math.random()}`;
+    const user  = randomUUID();
     const token = makeTestJWT(user);
     process.env.JWT_SECRET = TEST_SECRET;
 

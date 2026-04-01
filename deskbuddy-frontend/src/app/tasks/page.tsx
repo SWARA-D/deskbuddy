@@ -84,7 +84,10 @@ function TasksInner() {
   const router       = useRouter();
 
   const addParam = searchParams.get("add");
-  const returnTo = searchParams.get("returnTo");
+  // MED-2: only honour same-origin relative paths to prevent open-redirect abuse
+  const rawReturnTo = searchParams.get("returnTo");
+  const returnTo = rawReturnTo?.startsWith("/") && !rawReturnTo.startsWith("//")
+    ? rawReturnTo : null;
 
   const [itemType,   setItemType]   = useState<ItemType>(
     addParam === "habit" ? "habit" : addParam === "goal" ? "goal" : "task"

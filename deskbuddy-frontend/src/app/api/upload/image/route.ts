@@ -29,14 +29,18 @@ function checkUploadRateLimit(userId: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth required in production
+  // CRIT-1: fail closed — JWT_SECRET absence means misconfigured deployment
+  if (!process.env.JWT_SECRET) {
+    console.error("FATAL: JWT_SECRET is not set — refusing upload request");
+    return NextResponse.json({ error: "Service misconfigured" }, { status: 503 });
+  }
   const payload = extractUserFromRequest(req);
-  if (process.env.JWT_SECRET && !payload) {
+  if (!payload) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   // Rate limit: 10 uploads per user per hour
-  const userId = payload?.sub ?? "anon";
+  const userId = payload.sub;
   if (!checkUploadRateLimit(userId)) {
     return NextResponse.json(
       { error: "Upload limit reached (10 per hour)" },
@@ -93,7 +97,8 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json() as { secure_url: string; public_id: string };
-    return NextResponse.json({ url: data.secure_url, public_id: data.public_id });
+    // INFO-2: only return the URL — public_id is an internal Cloudinary detail
+    return NextResponse.json({ url: data.secure_url });
 
   } catch (err) {
     console.error("Image upload error:", err);

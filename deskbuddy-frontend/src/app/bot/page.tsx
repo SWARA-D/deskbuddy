@@ -6,38 +6,76 @@ import { useState, useRef, useEffect } from "react";
 import { botApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
+const BOT_HISTORY_KEY = "deskbuddy_bot_history";
+const MAX_HISTORY     = 50;
+
+const INITIAL_MSG = { role: "bot" as const, text: "Hey! I'm your Desk Buddy assistant. What can I help you with today?", id: "init" };
+
 interface Msg {
+  id: string;
   role: "user" | "bot";
   text: string;
   error?: boolean;
 }
 
+function loadHistory(): Msg[] {
+  try {
+    const stored = localStorage.getItem(BOT_HISTORY_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored) as Msg[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [INITIAL_MSG];
+}
+
 export default function BotPage() {
   const { isAuthenticated } = useAuth();
 
-  const [messages, setMessages] = useState<Msg[]>([
-    { role: "bot", text: "Hey! I'm your Desk Buddy assistant. What can I help you with today?" },
-  ]);
+  const [messages, setMessages] = useState<Msg[]>([INITIAL_MSG]);
   const [input,   setInput]   = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Load history from localStorage on mount (client-side only)
+  useEffect(() => {
+    setMessages(loadHistory());
+    setHydrated(true);
+  }, []);
+
+  // Persist messages to localStorage whenever they change
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const toStore = messages.slice(-MAX_HISTORY);
+      localStorage.setItem(BOT_HISTORY_KEY, JSON.stringify(toStore));
+    } catch { /* ignore */ }
+  }, [messages, hydrated]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  const clearChat = () => {
+    const fresh = [INITIAL_MSG];
+    setMessages(fresh);
+    localStorage.removeItem(BOT_HISTORY_KEY);
+  };
+
   const send = async () => {
     const trimmed = input.trim();
     if (!trimmed || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
+    const userMsgId = `user-${Date.now()}`;
+    setMessages((prev) => [...prev, { id: userMsgId, role: "user", text: trimmed }]);
     setInput("");
     setLoading(true);
 
     if (!isAuthenticated) {
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: "🔒 Please log in to chat with me!", error: true },
+        { id: `bot-${Date.now()}`, role: "bot", text: "🔒 Please log in to chat with me!", error: true },
       ]);
       setLoading(false);
       return;
@@ -45,13 +83,13 @@ export default function BotPage() {
 
     try {
       const res = await botApi.message(trimmed);
-      setMessages((prev) => [...prev, { role: "bot", text: res.data.reply }]);
+      setMessages((prev) => [...prev, { id: `bot-${Date.now()}`, role: "bot", text: res.data.reply }]);
     } catch (err: any) {
       // Graceful degradation — show a helpful fallback rather than a raw error
       const fallback = localFallback(trimmed);
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: fallback, error: err.status === 429 },
+        { id: `bot-${Date.now()}`, role: "bot", text: fallback, error: err.status === 429 },
       ]);
     } finally {
       setLoading(false);
@@ -60,12 +98,21 @@ export default function BotPage() {
 
   return (
     <DeskLayout>
-      <div className="max-w-2xl mx-auto pt-10 flex flex-col" style={{ height: "calc(100vh - 160px)" }}>
+      <div className="max-w-2xl mx-auto pt-10 flex flex-col" style={{ height: "calc(100dvh - 160px)", minHeight: "300px" }}>
         <BackButton />
 
-        <h2 className="font-pixel text-3xl uppercase tracking-widest mb-4 text-pixel-black dark:text-[#F5E6D3]">
-          Bot
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-pixel text-3xl uppercase tracking-widest text-pixel-black dark:text-[#F5E6D3]">
+            Bot
+          </h2>
+          <button
+            onClick={clearChat}
+            className="font-pixel text-xs opacity-40 hover:opacity-80 transition-opacity uppercase tracking-wider"
+            aria-label="Clear chat history"
+          >
+            Clear chat
+          </button>
+        </div>
 
         {/* Offline / unauthed notice */}
         {!isAuthenticated && (
@@ -76,9 +123,9 @@ export default function BotPage() {
         )}
 
         {/* Chat window */}
-        <div className="flex-1 overflow-y-auto flex flex-col gap-3 pr-1 pb-2">
-          {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+        <div role="log" aria-live="polite" className="flex-1 overflow-y-auto flex flex-col gap-3 pr-1 pb-2">
+          {messages.map((m) => (
+            <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-[80%] rounded-xl px-4 py-2.5 pixel-shadow
                   ${m.role === "user"
@@ -120,7 +167,7 @@ export default function BotPage() {
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="Tell me what to do…"
             disabled={loading}
-            className="flex-1 bg-white/50 dark:bg-black/25 border-2 border-black/10 rounded-xl px-4 py-2.5 font-display text-sm placeholder:opacity-40 dark:text-[#F5E6D3] outline-none focus:border-primary/40 transition-colors disabled:opacity-50"
+            className="flex-1 bg-white/50 dark:bg-black/25 border-2 border-black/10 rounded-xl px-4 py-2.5 font-display text-base placeholder:opacity-40 dark:text-[#F5E6D3] outline-none focus:border-primary/40 transition-colors disabled:opacity-50"
           />
           <button
             onClick={send}

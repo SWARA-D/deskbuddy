@@ -11,9 +11,19 @@ const MONTHS = [
 
 export default function CalendarCard() {
   const today = new Date();
-  const [year]  = useState(today.getFullYear());
-  const [month] = useState(today.getMonth());       // 0-indexed
+  const [year,  setYear]  = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());       // 0-indexed
   const dayOfMonth = today.getDate();
+
+  function prevMonth() {
+    if (month === 0) { setMonth(11); setYear((y) => y - 1); }
+    else             { setMonth((m) => m - 1); }
+  }
+
+  function nextMonth() {
+    if (month === 11) { setMonth(0); setYear((y) => y + 1); }
+    else              { setMonth((m) => m + 1); }
+  }
 
   /* first weekday (0=Sun) of this month, and total days */
   const { firstDay, totalDays } = useMemo(() => {
@@ -34,10 +44,22 @@ export default function CalendarCard() {
       <div className="w-44 sm:w-52 lg:w-56 bg-calendar-white border-2 border-black/10 p-3 sm:p-4 pixel-shadow flex flex-col gap-2">
         {/* header row */}
         <div className="flex items-center justify-between border-b-2 border-pixel-black/10 pb-2 mb-2">
-          <p className="font-pixel text-lg sm:text-xl text-pixel-black tracking-widest uppercase">
-            {MONTHS[month]}
-          </p>
-          <p className="font-pixel text-xs sm:text-sm text-pixel-black/40">{year}</p>
+          <button
+            onClick={(e) => { e.preventDefault(); prevMonth(); }}
+            className="opacity-40 hover:opacity-80 text-xs px-1 font-pixel"
+            aria-label="Previous month"
+          >‹</button>
+          <div className="text-center">
+            <p className="font-pixel text-base sm:text-lg text-pixel-black tracking-widest uppercase leading-none">
+              {MONTHS[month]}
+            </p>
+            <p className="font-pixel text-[10px] sm:text-xs text-pixel-black/40">{year}</p>
+          </div>
+          <button
+            onClick={(e) => { e.preventDefault(); nextMonth(); }}
+            className="opacity-40 hover:opacity-80 text-xs px-1 font-pixel"
+            aria-label="Next month"
+          >›</button>
         </div>
 
         {/* weekday headers + day grid */}
@@ -60,7 +82,7 @@ export default function CalendarCard() {
           {/* current month days */}
           {Array.from({ length: totalDays }, (_, i) => {
             const day = i + 1;
-            const isToday = day === dayOfMonth;
+            const isToday = day === dayOfMonth && month === today.getMonth() && year === today.getFullYear();
             return (
               <span
                 key={`cur-${day}`}

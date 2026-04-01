@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import DeskLayout from "@/components/layout/DeskLayout";
 import BackButton from "@/components/ui/BackButton";
@@ -58,7 +58,7 @@ function SignalBars({ active }: { active: boolean }) {
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
-export default function MusicPage() {
+function MusicInner() {
   const searchParams = useSearchParams();
   const router       = useRouter();
 
@@ -88,6 +88,7 @@ export default function MusicPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading,      setLoading]      = useState(false);
   const [animating,    setAnimating]    = useState<"zoom-in" | "zoom-out" | null>(null);
+  const [playlistError, setPlaylistError] = useState(false);
 
   // Stores the pixel coordinates of the iPod screen centre so the zoom
   // animation expands from the right origin point.
@@ -131,6 +132,7 @@ export default function MusicPage() {
   async function selectMood(m: MusicMood) {
     setMood(m);
     setLoading(true);
+    setPlaylistError(false);
 
     calcZoomOrigin();
     setAnimating("zoom-in");
@@ -143,6 +145,7 @@ export default function MusicPage() {
       setAllPlaylists(result.allPlaylists || []);
     } catch (err) {
       console.error("Failed to load playlist:", err);
+      setPlaylistError(true);
     } finally {
       setLoading(false);
     }
@@ -433,6 +436,7 @@ export default function MusicPage() {
         <div
           className={`fixed inset-0 z-50 bg-gradient-to-br ${MOOD_GRADIENTS[mood]} backdrop-blur-md`}
           style={{
+            height: "100dvh",
             transformOrigin: `${zoomOrigin.x} ${zoomOrigin.y}`,
             ...(!isFullscreen && !animating
               ? { visibility: "hidden" as const, pointerEvents: "none" as const }
@@ -497,13 +501,13 @@ export default function MusicPage() {
 
             {/* Spotify embed — fills remaining height */}
             {!loading && playlistId && (
-              <div className="flex-1 px-6 pb-6 min-h-0">
+              <div className="flex-1 min-h-0 px-6 pb-6">
                 <iframe
                   key={playlistId}
                   src={`https://open.spotify.com/embed/playlist/${playlistId}?utm_source=generator&theme=0`}
                   width="100%"
-                  height="100%"
-                  style={{ borderRadius: "16px", border: "none", minHeight: "380px" }}
+                  className="flex-1 min-h-0"
+                  style={{ borderRadius: "16px", border: "none", height: "100%" }}
                   allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
                   loading="lazy"
                 />
@@ -513,7 +517,13 @@ export default function MusicPage() {
             {/* Empty state when no playlist could be found */}
             {!loading && !playlistId && (
               <div className="flex-1 flex items-center justify-center">
-                <p className="font-pixel text-white/40 text-sm text-center">Couldn&apos;t find a playlist.<br />Try another mood.</p>
+                {playlistError ? (
+                  <p className="font-pixel text-white/60 text-sm text-center px-6">
+                    Couldn&apos;t load a playlist — check your connection and try again.
+                  </p>
+                ) : (
+                  <p className="font-pixel text-white/40 text-sm text-center">Couldn&apos;t find a playlist.<br />Try another mood.</p>
+                )}
               </div>
             )}
 
@@ -535,5 +545,13 @@ export default function MusicPage() {
       )}
 
     </DeskLayout>
+  );
+}
+
+export default function MusicPage() {
+  return (
+    <Suspense fallback={null}>
+      <MusicInner />
+    </Suspense>
   );
 }

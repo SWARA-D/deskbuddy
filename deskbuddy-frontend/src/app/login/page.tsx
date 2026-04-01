@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -50,6 +51,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-desk-wood dark:bg-desk-wood-dark flex items-center justify-center px-4">
+      {/* Back to home */}
+      <Link
+        href="/"
+        className="absolute top-4 left-4 flex items-center gap-1.5 font-pixel text-xs uppercase tracking-widest opacity-50 hover:opacity-90 transition-opacity dark:text-[#F5E6D3]"
+      >
+        <span className="material-symbols-outlined text-base">arrow_back</span>
+        Home
+      </Link>
       {/* Card */}
       <div className="w-full max-w-sm bg-white/50 dark:bg-black/30 border-2 border-black/10 rounded-2xl pixel-shadow p-8 flex flex-col gap-6">
 

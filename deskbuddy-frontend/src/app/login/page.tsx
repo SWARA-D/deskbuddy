@@ -16,15 +16,6 @@ function sanitize(value: string): string {
     .replace(/on\w+\s*=/gi, "");      // strip inline event handlers
 }
 
-/** SHA-256 hash a password so it is never sent in plain text over the wire. */
-async function hashPassword(password: string): Promise<string> {
-  const encoded = new TextEncoder().encode(password);
-  const buffer  = await crypto.subtle.digest("SHA-256", encoded);
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 export default function LoginPage() {
   const { login, register, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -55,13 +46,12 @@ export default function LoginPage() {
 
     setBusy(true);
     try {
-      const cleanEmail    = sanitize(email);
-      const hashedPassword = await hashPassword(password);
+      const cleanEmail = sanitize(email);
 
       if (mode === "login") {
-        await login(cleanEmail, hashedPassword);
+        await login(cleanEmail, password);
       } else {
-        await register(cleanEmail, hashedPassword);
+        await register(cleanEmail, password);
       }
       window.location.href = "/";
     } catch (err: any) {

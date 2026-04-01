@@ -1,8 +1,18 @@
 /**
  * Tests for the journal entries API route (in-memory store mode).
  *
- * The route falls back to an in-memory array when DATABASE_URL is not set.
- * These tests exercise that path directly so they run without Postgres.
+ * The route has two operating modes:
+ *
+ *  A. DATABASE_URL set but unreachable (pg import fails → Pool is null → in-memory MEM array)
+ *     This is how the main suite runs — we set DATABASE_URL to a fake value so the
+ *     route skips the "no DB" early-return, attempts to load pg, fails, and falls
+ *     through to the MEM array.  Full CRUD semantics work.
+ *
+ *  B. DATABASE_URL absent
+ *     GET  → 200 { entry: null }   (NOT 503)
+ *     POST → 200 { success: true, entry: null }   (NOT 503)
+ *     The frontend falls back to localStorage; 200 is the correct silent ack.
+ *     Tested in the "no-database mode" describe block below.
  *
  * Current API shape:
  *  - GET  /api/journal/entries?date=YYYY-MM-DD  → { entry: DBEntry | null }
@@ -11,9 +21,26 @@
  *    201 on insert, 200 on update, 400 if text is missing/empty
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { POST, GET } from "@/app/api/journal/entries/route";
 import { NextRequest } from "next/server";
+
+// ── Module-level DATABASE_URL setup ───────────────────────────────────────────
+// Set a fake DATABASE_URL so the route skips the "no DB" early-return and falls
+// through to the in-memory MEM array.
+// We also mock `pg` so `new Pool(...)` always throws — this causes getPool()
+// to catch the error and return null, which triggers the MEM in-memory path.
+process.env.DATABASE_URL = "postgresql://fake:fake@127.0.0.1:5432/fake_test_db";
+
+vi.mock("pg", () => {
+  return {
+    Pool: class {
+      constructor() {
+        throw new Error("pg mocked — no real DB in tests");
+      }
+    },
+  };
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -198,5 +225,49 @@ describe("GET /api/journal/entries", () => {
     expect(json.entry.sentiment).toBe("positive");
     expect(json.entry.emotion).toBe("happy");
     expect(json.entry.confidence).toBe(0.91);
+  });
+});
+
+// ── No-database (DATABASE_URL absent) behaviour ───────────────────────────────
+// When DATABASE_URL is not set the route must return 200, not 503.
+// The 200 is a silent acknowledgement so the frontend falls back to localStorage
+// without displaying an error to the user.
+
+describe("no-database mode (DATABASE_URL absent)", () => {
+  beforeEach(() => {
+    delete process.env.DATABASE_URL;
+  });
+
+  afterEach(() => {
+    // Restore the fake DB URL used by the main suite
+    process.env.DATABASE_URL = "postgresql://fake:fake@localhost:5432/fake_test_db";
+  });
+
+  it("GET returns 200 (not 503) when DATABASE_URL is not set", async () => {
+    const res = await GET(makeGet({ date: "2099-01-01" }));
+    expect(res.status).toBe(200);
+  });
+
+  it("GET returns { entry: null } when DATABASE_URL is not set", async () => {
+    const res  = await GET(makeGet({ date: "2099-01-02" }));
+    const json = await res.json();
+    expect(json.entry).toBeNull();
+  });
+
+  it("POST returns 200 (not 503) when DATABASE_URL is not set", async () => {
+    const res = await POST(makePost({ text: "Today was a fine day overall.", date: "2099-02-01" }));
+    expect(res.status).toBe(200);
+  });
+
+  it("POST returns { success: true, entry: null } when DATABASE_URL is not set", async () => {
+    const res  = await POST(makePost({ text: "Another quiet evening at home.", date: "2099-02-02" }));
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.entry).toBeNull();
+  });
+
+  it("POST still returns 400 when text is missing (validation runs before DB check)", async () => {
+    const res = await POST(makePost({ date: "2099-02-03" }));
+    expect(res.status).toBe(400);
   });
 });

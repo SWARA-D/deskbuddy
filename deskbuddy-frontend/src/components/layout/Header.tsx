@@ -9,7 +9,8 @@ export default function Header() {
   const { user, isAuthenticated, logout } = useAuth();
   const router = useRouter();
 
-  const [isDark, setIsDark] = useState(false);
+  const [isDark,   setIsDark]   = useState(false);
+  const [toast,    setToast]    = useState(false);
 
   useEffect(() => {
     const update = () => setIsDark(document.documentElement.classList.contains("dark"));
@@ -23,9 +24,12 @@ export default function Header() {
     window.dispatchEvent(new CustomEvent("db:toggle-theme"));
   };
 
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
+  const handleLogout = async () => {
+    await logout();        // clear cookie + localStorage
+    setToast(true);        // show "logged out" toast
+    setTimeout(() => {
+      window.location.href = "/login";  // full reload so cookie is gone before middleware runs
+    }, 1800);
   };
 
   return (
@@ -109,6 +113,13 @@ export default function Header() {
           <span className="material-symbols-outlined text-base sm:text-lg">settings</span>
         </button>
       </div>
+      {/* ── logout toast ── */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 px-5 py-3 bg-pixel-black dark:bg-[#F5E6D3] text-[#F5E6D3] dark:text-pixel-black border-2 border-black/20 rounded-xl pixel-shadow animate-fade-in">
+          <span className="material-symbols-outlined text-base">logout</span>
+          <span className="font-pixel text-xs uppercase tracking-widest">You have been logged out</span>
+        </div>
+      )}
     </header>
   );
 }

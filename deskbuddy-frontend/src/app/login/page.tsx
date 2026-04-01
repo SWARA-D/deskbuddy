@@ -39,7 +39,7 @@ export default function LoginPage() {
       } else {
         await register(email, password);
       }
-      router.replace("/");
+      window.location.href = "/";
     } catch (err: any) {
       setError(err.message ?? "Something went wrong. Try again.");
     } finally {

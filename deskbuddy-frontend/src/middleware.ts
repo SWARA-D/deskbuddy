@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Routes that never require authentication
-const PUBLIC_PATHS = ["/login"];
+// Pages that are always accessible without a token.
+// "/" is public so the home button and post-login redirect work without
+// a middleware race; the page itself gates per-feature access via AuthProvider.
+const PUBLIC_PATHS = ["/", "/login"];
 
 // Prefixes always allowed through (Next.js internals + API routes)
 // API routes enforce their own JWT checks — middleware only guards page navigation.
@@ -60,11 +62,14 @@ export function middleware(request: NextRequest) {
 
   let response: NextResponse;
 
-  if (PUBLIC_PATHS.includes(pathname)) {
-    // Already authenticated — redirect home
+  if (pathname === "/login") {
+    // Already authenticated — skip login page, go home
     if (token) {
       return NextResponse.redirect(new URL("/", request.url));
     }
+    response = NextResponse.next();
+  } else if (PUBLIC_PATHS.includes(pathname)) {
+    // Public page — always allow through
     response = NextResponse.next();
   } else if (!token) {
     const loginUrl = new URL("/login", request.url);

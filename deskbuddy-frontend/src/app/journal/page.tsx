@@ -12,6 +12,7 @@ import {
   getHabits, getGoals, toggleGoal as storageToggleGoal,
 } from "@/lib/storage";
 import type { Habit as StorageHabit, Goal as StorageGoal } from "@/lib/storage";
+import { getStoredToken } from "@/lib/auth";
 import type { MoodResult, JournalEntry } from "@/types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -241,7 +242,10 @@ export default function JournalPage() {
 
     // Then try API — overwrite with server copy if found.
     try {
-      const res = await fetch(`/api/journal/entries?date=${date}`);
+      const token = getStoredToken();
+      const res = await fetch(`/api/journal/entries?date=${date}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         const data = await res.json() as { entry: JournalEntry | null };
         if (data.entry) {
@@ -298,10 +302,16 @@ export default function JournalPage() {
   // ── Save to API ────────────────────────────────────────────────────────
   const saveToAPI = async (text: string, moodResult: MoodResult | null): Promise<boolean> => {
     if (!text.trim()) return false;
+    // Always persist locally so the entry is never lost if the DB is unavailable.
+    localStorage.setItem(draftKey(currentDate), text);
     try {
+      const token = getStoredToken();
       const res = await fetch("/api/journal/entries", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           text,
           input_type: "typed",
@@ -332,10 +342,14 @@ export default function JournalPage() {
     if (entryText.trim().length < 5) return;
     setAnalyzing(true);
     try {
+      const token = getStoredToken();
       const res = await fetch("/api/analyze", {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ text: entryText }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ text: entryText }),
       });
 
       if (res.status === 503) {
@@ -375,7 +389,7 @@ export default function JournalPage() {
       setSaving(true);
       const saved = await saveToAPI(entryText, result);
       setSaving(false);
-      showToast(saved ? "✦ Analyzed & saved!" : "✦ Analysis complete!");
+      showToast(saved ? "✦ Analyzed & saved!" : "✦ Analysis complete! (saved locally)");
     } catch {
       showToast("⚠ Analysis failed — check console");
     } finally {
@@ -389,7 +403,7 @@ export default function JournalPage() {
     setSaving(true);
     const saved = await saveToAPI(entryText, mood);
     setSaving(false);
-    showToast(saved ? "✦ Entry saved!" : "⚠ Save failed — check console");
+    showToast(saved ? "✦ Entry saved!" : "✦ Saved locally!");
   };
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -532,10 +546,7 @@ export default function JournalPage() {
             ) : (
               <>
                 {/* Lined textarea */}
-                <div
-                  className="flex-1 relative"
-                  style={{ backgroundImage: "linear-gradient(#e8e8e8 1px, transparent 1px)", backgroundSize: "100% 28px" }}
-                >
+                <div className="flex-1 relative">
                   <textarea
                     ref={textareaRef}
                     value={entryText}
@@ -546,7 +557,14 @@ export default function JournalPage() {
                     }}
                     placeholder="Dear Journal, today was..."
                     className="font-pixel w-full h-full bg-transparent border-none resize-none p-1 text-pixel-black dark:text-[#F5E6D3] placeholder-gray-300 focus:ring-0 focus:outline-none"
-                    style={{ minHeight: "calc(70vh - 180px)", fontSize: "21px", lineHeight: "28px" }}
+                    style={{
+                      minHeight: "calc(70vh - 180px)",
+                      fontSize: "21px",
+                      lineHeight: "28px",
+                      backgroundImage: "linear-gradient(#e8e8e8 1px, transparent 1px)",
+                      backgroundSize: "100% 28px",
+                      backgroundAttachment: "local",
+                    }}
                   />
                   <span className="material-symbols-outlined absolute bottom-3 right-3 text-4xl opacity-10 pointer-events-none">pen_size_2</span>
                 </div>
@@ -789,10 +807,7 @@ export default function JournalPage() {
 
       <Toast message={toast} visible={toastVisible} />
 
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-        @keyframes blink  { 0%,80%,100% { opacity: 0; } 40% { opacity: 1; } }
-      `}} />
+      {/* Animation keyframes (fadeIn, blink) are defined in globals.css */}
     </DeskLayout>
   );
 }

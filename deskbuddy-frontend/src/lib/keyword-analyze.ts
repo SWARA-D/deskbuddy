@@ -31,8 +31,15 @@ export function keywordAnalyze(text: string): MoodResult {
   let detected = "neutral";
   let maxHits  = 0;
 
+  // Use word-boundary matching for single words, substring for phrases.
+  // This prevents e.g. "mad" matching inside "made" or "bad" inside "badly".
+  const matchesKeyword = (kw: string) =>
+    kw.includes(" ")
+      ? lower.includes(kw)
+      : new RegExp(`\\b${kw}\\b`).test(lower);
+
   for (const [emotion, keywords] of Object.entries(EMOTION_KEYWORDS)) {
-    const hits = keywords.filter((kw) => lower.includes(kw)).length;
+    const hits = keywords.filter(matchesKeyword).length;
     if (hits > maxHits) {
       maxHits  = hits;
       detected = emotion;

@@ -12,6 +12,17 @@ import BotCard      from "@/components/desk-items/Bot";
 
 const POSITIONS_KEY = "deskbuddy_desk_positions_v5";
 
+// Q6: clean up stale keys from previous versions on first load
+const STALE_KEYS = [
+  "deskbuddy_desk_positions_v1",
+  "deskbuddy_desk_positions_v2",
+  "deskbuddy_desk_positions_v3",
+  "deskbuddy_desk_positions_v4",
+];
+function pruneStaleKeys() {
+  try { STALE_KEYS.forEach(k => localStorage.removeItem(k)); } catch { /* ignore */ }
+}
+
 type Pos = { x: number; y: number };
 
 /**
@@ -81,6 +92,7 @@ function getDefaults(): Record<string, Pos> {
 
 function loadPositions(): Record<string, Pos> {
   const defaults = getDefaults();
+  pruneStaleKeys();
   try {
     const raw = localStorage.getItem(POSITIONS_KEY);
     if (raw) return { ...defaults, ...JSON.parse(raw) };
@@ -88,8 +100,14 @@ function loadPositions(): Record<string, Pos> {
   return defaults;
 }
 
+// P4: throttled persist — at most one write per 200 ms during a drag
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
 function persist(positions: Record<string, Pos>) {
-  try { localStorage.setItem(POSITIONS_KEY, JSON.stringify(positions)); } catch { /* ignore */ }
+  if (_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(() => {
+    try { localStorage.setItem(POSITIONS_KEY, JSON.stringify(positions)); } catch { /* ignore */ }
+    _persistTimer = null;
+  }, 200);
 }
 
 // ── DraggableItem ──────────────────────────────────────────────────────────────
@@ -198,22 +216,25 @@ export default function DeskHome() {
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  // placeholder matches a typical 3-col lg layout; patched after mount
-  const [positions, setPositions] = useState<Record<string, Pos>>(() => ({
-    camera:   { x: 60,  y: 80  },
-    calendar: { x: 300, y: 40  },
-    ipod:     { x: 580, y: 60  },
-    journal:  { x: 60,  y: 360 },
-    bot:      { x: 580, y: 360 },
-  }));
+  // P6: don't render items until real positions are loaded from localStorage
+  // (avoids the jump from SSR placeholder → saved positions)
+  const [positions, setPositions] = useState<Record<string, Pos>>({} as Record<string, Pos>);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setPositions(loadPositions());
+    setMounted(true);
   }, []);
 
   const handleMove = useCallback((id: string, pos: Pos) => {
     setPositions(prev => {
-      const next = { ...prev, [id]: pos };
+      // M2: clamp so items can't be dragged fully off-screen
+      const margin = 40;
+      const clamped: Pos = {
+        x: Math.max(-margin, Math.min(pos.x, window.innerWidth  - margin)),
+        y: Math.max(0,       Math.min(pos.y, window.innerHeight - margin)),
+      };
+      const next = { ...prev, [id]: clamped };
       persist(next);
       return next;
     });
@@ -244,25 +265,28 @@ export default function DeskHome() {
           </button>
         </div>
 
-        <DraggableItem id="camera" pos={positions.camera} scale={scale} onMove={handleMove}>
-          <CameraCard />
-        </DraggableItem>
+        {/* P6: only render after positions loaded — prevents jump from placeholder to real coords */}
+        {mounted && (<>
+          <DraggableItem id="camera" pos={positions.camera} scale={scale} onMove={handleMove}>
+            <CameraCard />
+          </DraggableItem>
 
-        <DraggableItem id="calendar" pos={positions.calendar} scale={scale} onMove={handleMove}>
-          <CalendarCard />
-        </DraggableItem>
+          <DraggableItem id="calendar" pos={positions.calendar} scale={scale} onMove={handleMove}>
+            <CalendarCard />
+          </DraggableItem>
 
-        <DraggableItem id="ipod" pos={positions.ipod} scale={scale} onMove={handleMove}>
-          <IPodCard />
-        </DraggableItem>
+          <DraggableItem id="ipod" pos={positions.ipod} scale={scale} onMove={handleMove}>
+            <IPodCard />
+          </DraggableItem>
 
-        <DraggableItem id="journal" pos={positions.journal} scale={scale} onMove={handleMove}>
-          <JournalCard />
-        </DraggableItem>
+          <DraggableItem id="journal" pos={positions.journal} scale={scale} onMove={handleMove}>
+            <JournalCard />
+          </DraggableItem>
 
-        <DraggableItem id="bot" pos={positions.bot} scale={scale} onMove={handleMove}>
-          <BotCard />
-        </DraggableItem>
+          <DraggableItem id="bot" pos={positions.bot} scale={scale} onMove={handleMove}>
+            <BotCard />
+          </DraggableItem>
+        </>)}
       </div>
     </DeskLayout>
   );

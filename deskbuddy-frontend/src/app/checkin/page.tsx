@@ -6,6 +6,7 @@ import DeskLayout from "@/components/layout/DeskLayout";
 import BackButton from "@/components/ui/BackButton";
 import Toast from "@/components/ui/Toast";
 import { useToast } from "@/hooks/useToast";
+import { checkinApi } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ export default function CheckinPage() {
   const [camError,     setCamError]     = useState("");
   const [saving,       setSaving]       = useState(false);
   const [selected,     setSelected]     = useState<Snapshot | null>(null);
+  const [backendStreak, setBackendStreak] = useState<number | null>(null);
 
   const videoRef    = useRef<HTMLVideoElement>(null);
   const canvasRef   = useRef<HTMLCanvasElement>(null);
@@ -84,6 +86,10 @@ export default function CheckinPage() {
   useEffect(() => {
     setSnapshots(readSnapshots());
     setPinned(readPinned());
+    // B10: try to get authoritative streak from backend (works across devices/browsers)
+    checkinApi.streak().then((res) => {
+      if (res.data?.current) setBackendStreak(res.data.current);
+    }).catch(() => { /* backend offline — use localStorage streak */ });
   }, []);
 
   // Stop camera stream on unmount.
@@ -188,6 +194,10 @@ export default function CheckinPage() {
       setEmotion("");
       setCaption("");
       setSavedSnap(snap); // trigger journal prompt
+      // B10: sync check-in date to backend (fire-and-forget)
+      checkinApi.create(today, caption.trim() || undefined)
+        .then((res) => { if (res.data?.streak?.current) setBackendStreak(res.data.streak.current); })
+        .catch(() => { /* backend offline */ });
     } finally {
       setSaving(false);
     }
@@ -236,8 +246,8 @@ export default function CheckinPage() {
   const daysInMonth  = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const snapshotDates = new Set(snapshots.map((s) => s.date));
 
-  // Count consecutive days ending today with at least one snapshot.
-  const streak = useMemo(() => {
+  // Count consecutive days ending today with at least one snapshot (localStorage fallback).
+  const localStreak = useMemo(() => {
     let count = 0;
     const d = new Date();
     while (snapshotDates.has(d.toLocaleDateString("en-CA"))) {
@@ -246,6 +256,9 @@ export default function CheckinPage() {
     }
     return count;
   }, [snapshotDates]);
+
+  // B10: prefer backend streak (cross-device accurate) over local count
+  const streak = backendStreak ?? localStreak;
 
   const emotionOf = (name: string) => EMOTIONS.find((e) => e.name === name);
 

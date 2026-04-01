@@ -3,10 +3,11 @@
 import Link from "next/link";
 
 const dockItems = [
-  { icon: "calendar_today", href: "/tasks", label: "Calendar" },
-  { icon: "checklist", href: "/tasks", label: "Tasks" },
-  { icon: "local_cafe", href: "/checkin", label: "Check-in", accent: true },
-  { icon: "lightbulb", href: "/bot", label: "Bot" }
+  { icon: "checklist",    href: "/tasks",   label: "Tasks"    },
+  { icon: "music_note",   href: "/music",   label: "Music"    },
+  { icon: "local_cafe",   href: "/checkin", label: "Check-in", accent: true },
+  { icon: "book_2",       href: "/journal", label: "Journal"  },
+  { icon: "lightbulb",    href: "/bot",     label: "Bot"      },
 ];
 
 export default function Footer() {

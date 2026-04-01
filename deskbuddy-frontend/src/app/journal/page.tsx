@@ -485,7 +485,7 @@ export default function JournalPage() {
 
         {/* Mobile panel tabs */}
         <div
-          className="flex md:hidden"
+          className="flex lg:hidden"
           style={{ borderLeft: "4px solid #292929", borderRight: "4px solid #292929", borderTop: "4px solid #292929" }}
         >
           {(["write", "sidebar"] as const).map((tab) => (
@@ -506,12 +506,12 @@ export default function JournalPage() {
 
         {/* Two-panel journal card */}
         <div
-          className="grid md:grid-cols-2 bg-white dark:bg-zinc-900 relative"
+          className="grid lg:grid-cols-2 bg-white dark:bg-zinc-900 relative"
           style={{ border: "4px solid #292929", boxShadow: "4px 4px 0 0 rgba(0,0,0,0.10)", borderTop: "none", minHeight: "70vh" }}
         >
           {/* ── LEFT: Write panel ──────────────────────────────────────── */}
           <div
-            className={`p-7 flex-col ${panelTab === "write" ? "flex" : "hidden md:flex"}`}
+            className={`p-7 flex-col ${panelTab === "write" ? "flex" : "hidden lg:flex"}`}
             style={{ borderRight: "2px dashed #ccc", minHeight: "70vh" }}
           >
             {/* Date navigation row */}
@@ -634,7 +634,7 @@ export default function JournalPage() {
           </div>
 
           {/* ── RIGHT: Habits + Memories + Todos ───────────────────────── */}
-          <div className={`flex-col bg-gray-50 dark:bg-zinc-800 divide-y divide-dashed divide-gray-200 dark:divide-zinc-600 overflow-y-auto ${panelTab === "sidebar" ? "flex" : "hidden md:flex"}`} style={{ maxHeight: "90vh" }}>
+          <div className={`flex-col bg-gray-50 dark:bg-zinc-800 divide-y divide-dashed divide-gray-200 dark:divide-zinc-600 overflow-y-auto ${panelTab === "sidebar" ? "flex" : "hidden lg:flex"}`} style={{ maxHeight: "90vh" }}>
 
             {/* ── Top row: Habits + Memories ─────────────────────────── */}
             <div className="grid grid-cols-2 divide-x divide-dashed divide-gray-200 dark:divide-zinc-600">

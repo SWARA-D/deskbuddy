@@ -9,6 +9,7 @@ import {
   removeHabit, removeGoal, toggleGoal,
 } from "@/lib/storage";
 import type { Habit, Goal } from "@/lib/storage";
+import { tasksApi } from "@/lib/api";
 
 interface Task {
   id: number;
@@ -17,6 +18,8 @@ interface Task {
   difficulty: 1 | 2 | 3;
   dueAt: string;
   status: "todo" | "done";
+  /** Backend UUID — present once the task has been synced to the API */
+  serverId?: string;
 }
 
 const CATEGORIES = ["confidence", "social", "health", "work", "learning"] as const;
@@ -101,10 +104,37 @@ function TasksInner() {
   useEffect(() => {
     setHabits(getHabits());
     setGoals(getGoals());
+
+    // Load from localStorage first (instant, offline-safe)
+    let local: Task[] = [];
     try {
       const saved = localStorage.getItem(TASKS_KEY);
-      if (saved) setTasks(JSON.parse(saved));
+      if (saved) local = JSON.parse(saved);
     } catch { /* ignore */ }
+    setTasks(local);
+
+    // Then try syncing with backend — merge any tasks not already in localStorage
+    tasksApi.list().then((res) => {
+      if (!res.data?.items) return;
+      setTasks((prev) => {
+        const serverIds = new Set(prev.map((t) => t.serverId).filter(Boolean));
+        const incoming: Task[] = res.data.items
+          .filter((s) => !serverIds.has(s.id))
+          .map((s) => ({
+            id:         Date.now() + Math.random(),
+            title:      s.title,
+            category:   "work",
+            difficulty: 1 as const,
+            dueAt:      s.due_at?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+            status:     s.status === "done" ? "done" : "todo",
+            serverId:   s.id,
+          }));
+        if (incoming.length === 0) return prev;
+        const merged = [...prev, ...incoming];
+        try { localStorage.setItem(TASKS_KEY, JSON.stringify(merged)); } catch { /* ignore */ }
+        return merged;
+      });
+    }).catch(() => { /* backend offline — silently continue with localStorage */ });
   }, []);
 
   const saveTasks = (next: Task[]) => {
@@ -133,17 +163,34 @@ function TasksInner() {
       if (returnTo) router.push(returnTo);
     } else {
       if (!dueAt) return;
-      saveTasks([
-        ...tasks,
-        { id: Date.now(), title: title.trim(), category: category as Category, difficulty, dueAt, status: "todo" },
-      ]);
+      const newTask: Task = { id: Date.now(), title: title.trim(), category: category as Category, difficulty, dueAt, status: "todo" };
+      saveTasks([...tasks, newTask]);
       setTitle("");
       setCategory("");
+      // Fire-and-forget sync to backend; store serverId if successful
+      tasksApi.create(newTask.title, newTask.dueAt, newTask.category, newTask.difficulty)
+        .then((res) => {
+          if (!res.data?.task?.id) return;
+          setTasks((prev) => {
+            const updated = prev.map((t) => t.id === newTask.id ? { ...t, serverId: res.data.task.id } : t);
+            try { localStorage.setItem(TASKS_KEY, JSON.stringify(updated)); } catch { /* ignore */ }
+            return updated;
+          });
+        })
+        .catch(() => { /* backend offline — task already saved locally */ });
     }
   };
 
-  const toggleDone = (id: number) =>
-    saveTasks(tasks.map((t) => t.id === id ? { ...t, status: t.status === "todo" ? "done" : "todo" } : t));
+  const toggleDone = (id: number) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    const newStatus = task.status === "todo" ? "done" : "todo";
+    saveTasks(tasks.map((t) => t.id === id ? { ...t, status: newStatus } : t));
+    // Fire-and-forget backend sync if we have a serverId
+    if (task.serverId) {
+      tasksApi.update(task.serverId, { status: newStatus }).catch(() => { /* ignore */ });
+    }
+  };
 
   return (
     <DeskLayout>

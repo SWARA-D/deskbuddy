@@ -2,15 +2,22 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+
+const NAV_LINKS = [
+  { href: "/tasks",   label: "Focus"   },
+  { href: "/music",   label: "Music"   },
+  { href: "/journal", label: "Journal" },
+  { href: "/checkin", label: "Photos"  },
+  { href: "/bot",     label: "Bot"     },
+];
 
 export default function Header() {
   const { user, isAuthenticated, logout } = useAuth();
-  const router = useRouter();
 
-  const [isDark,   setIsDark]   = useState(false);
-  const [toast,    setToast]    = useState(false);
+  const [isDark,    setIsDark]    = useState(false);
+  const [toast,     setToast]     = useState(false);
+  const [mobileNav, setMobileNav] = useState(false);
 
   useEffect(() => {
     const update = () => setIsDark(document.documentElement.classList.contains("dark"));
@@ -44,26 +51,17 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 lg:gap-9">
-          <Link href="/tasks"   className="text-sm lg:text-lg font-pixel tracking-widest uppercase hover:text-ipod-blue transition-colors">Focus</Link>
-          <Link href="/music"   className="text-sm lg:text-lg font-pixel tracking-widest uppercase hover:text-ipod-blue transition-colors">Music</Link>
-          <Link href="/journal" className="text-sm lg:text-lg font-pixel tracking-widest uppercase hover:text-ipod-blue transition-colors">Journal</Link>
-          <Link href="/checkin" className="text-sm lg:text-lg font-pixel tracking-widest uppercase hover:text-ipod-blue transition-colors">Photos</Link>
-          <Link href="/bot"     className="text-sm lg:text-lg font-pixel tracking-widest uppercase hover:text-ipod-blue transition-colors">Bot</Link>
+          {NAV_LINKS.map(({ href, label }) => (
+            <Link key={href} href={href}
+              className="text-sm lg:text-lg font-pixel tracking-widest uppercase hover:text-ipod-blue transition-colors">
+              {label}
+            </Link>
+          ))}
         </nav>
       </div>
 
-      {/* ── right: search + user + theme ── */}
+      {/* ── right: user + theme + hamburger ── */}
       <div className="flex items-center gap-2 sm:gap-3 lg:gap-4">
-        {/* search box */}
-        <div className="hidden sm:flex items-center border-2 border-black/10 bg-white/40 dark:bg-black/20 rounded-lg px-2 sm:px-3 h-8 sm:h-10 pixel-shadow">
-          <span className="material-symbols-outlined text-base sm:text-lg opacity-50">search</span>
-          <input
-            type="text"
-            placeholder="Look around..."
-            className="bg-transparent border-none outline-none font-pixel text-sm sm:text-lg w-24 sm:w-32 lg:w-40 placeholder:opacity-50 dark:text-white ml-2"
-          />
-        </div>
-
         {/* user badge + logout */}
         {isAuthenticated && user && (
           <div className="flex items-center gap-2">
@@ -105,14 +103,39 @@ export default function Header() {
           </span>
         </button>
 
-        {/* settings (placeholder) */}
+        {/* hamburger — mobile only */}
         <button
-          className="size-8 sm:size-9 lg:size-10 bg-white/40 dark:bg-black/20 border-2 border-black/10 rounded-lg flex items-center justify-center pixel-shadow hover:bg-white/60 dark:hover:bg-black/40 transition-all"
-          title="Settings"
+          onClick={() => setMobileNav(v => !v)}
+          className="md:hidden size-8 sm:size-9 bg-white/40 dark:bg-black/20 border-2 border-black/10 rounded-lg flex items-center justify-center pixel-shadow hover:bg-white/60 dark:hover:bg-black/40 transition-all"
+          aria-label={mobileNav ? "Close menu" : "Open menu"}
         >
-          <span className="material-symbols-outlined text-base sm:text-lg">settings</span>
+          <span className="material-symbols-outlined text-base sm:text-lg">
+            {mobileNav ? "close" : "menu"}
+          </span>
         </button>
       </div>
+
+      {/* ── mobile nav drawer ── */}
+      {mobileNav && (
+        <div className="md:hidden absolute top-full left-0 right-0 z-50 bg-white/95 dark:bg-[#1a1108]/95 backdrop-blur-md border-b-2 border-black/10 px-6 py-4 flex flex-col gap-3">
+          {NAV_LINKS.map(({ href, label }) => (
+            <Link key={href} href={href}
+              onClick={() => setMobileNav(false)}
+              className="font-pixel text-sm uppercase tracking-widest hover:text-ipod-blue transition-colors py-1">
+              {label}
+            </Link>
+          ))}
+          {isAuthenticated && user && (
+            <button
+              onClick={() => { setMobileNav(false); handleLogout(); }}
+              className="font-pixel text-xs uppercase tracking-widest text-left opacity-60 hover:opacity-100 mt-2 pt-2 border-t border-black/10"
+            >
+              Log out ({user.email.split("@")[0]})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── logout toast ── */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-2 px-5 py-3 bg-pixel-black dark:bg-[#F5E6D3] text-[#F5E6D3] dark:text-pixel-black border-2 border-black/20 rounded-xl pixel-shadow animate-fade-in">

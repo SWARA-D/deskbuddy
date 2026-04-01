@@ -107,15 +107,15 @@ export const DEFAULT_HABITS = ["Morning Water", "Read 10 mins", "Meditation", "N
  * Checked against lowercased journal text; most keyword hits wins.
  */
 export const EMOTION_KEYWORDS: Record<string, string[]> = {
-  anxious:     ["anxious", "nervous", "worried", "stress", "anxiety", "panic", "scared", "fear"],
-  excited:     ["excited", "thrilled", "can't wait", "amazing", "pumped", "stoked"],
-  happy:       ["happy", "great", "wonderful", "joy", "glad", "cheerful", "love", "good day"],
-  sad:         ["sad", "cry", "upset", "down", "lonely", "miss", "lost", "grief", "hurt"],
-  calm:        ["calm", "peaceful", "relax", "serene", "quiet", "chill", "content"],
-  grateful:    ["grateful", "thankful", "appreciate", "blessed", "fortunate"],
-  overwhelmed: ["overwhelmed", "too much", "exhausted", "tired", "burnout", "can't handle"],
-  angry:       ["angry", "frustrated", "annoyed", "mad", "furious", "irritated"],
-  hopeful:     ["hopeful", "optimistic", "looking forward", "better", "improve", "hope"],
+  anxious:     ["anxious", "nervous", "worried", "stress", "anxiety", "panic", "scared", "fear", "dread", "uneasy"],
+  excited:     ["excited", "thrilled", "can't wait", "amazing", "pumped", "stoked", "win", "winning", "finally", "awesome", "fantastic"],
+  happy:       ["happy", "great", "wonderful", "joy", "glad", "cheerful", "love", "good day", "nice day", "nice", "satisfying", "lovely", "pleasant", "enjoyed", "enjoyable", "fun", "delightful", "no complaints", "no regrets", "felt right", "feels right", "good stuff", "felt good", "feels good", "really good", "really nice", "complete", "perfect"],
+  sad:         ["sad", "cry", "upset", "down", "lonely", "miss", "lost", "grief", "hurt", "depressed", "miserable", "heartbroken", "tearful"],
+  calm:        ["calm", "peaceful", "relax", "serene", "quiet", "chill", "content", "easy", "settled", "simple", "gentle", "slow day", "low key", "laid back"],
+  grateful:    ["grateful", "thankful", "appreciate", "blessed", "fortunate", "lucky", "grateful for", "thankful for", "so glad", "such a win"],
+  overwhelmed: ["overwhelmed", "too much", "exhausted", "tired", "burnout", "can't handle", "so much", "falling behind", "swamped"],
+  angry:       ["angry", "furious", "irritated", "rage", "outraged", "infuriated", "so angry", "so mad", "pissed"],
+  hopeful:     ["hopeful", "optimistic", "looking forward", "hopeful", "improve", "hope", "can't wait", "excited for", "things will"],
 };
 
 /**

@@ -39,6 +39,28 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Browser autofill override                                           */
+/* Browsers inject a blue/yellow background on autofilled inputs.     */
+/* Use an inset box-shadow trick to keep our own background colour.   */
+/* ------------------------------------------------------------------ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.6) inset;
+  -webkit-text-fill-color: #2A2A2A;
+  caret-color: #2A2A2A;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px rgba(0, 0, 0, 0.3) inset;
+  -webkit-text-fill-color: #F5E6D3;
+  caret-color: #F5E6D3;
+}
+
+/* ------------------------------------------------------------------ */
 /* Material Symbols helper — used as icon font throughout              */
 /* ------------------------------------------------------------------ */
 .material-symbols-outlined {
@@ -49,4 +71,30 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ------------------------------------------------------------------ */
+/* Page-level animations                                               */
+/* ------------------------------------------------------------------ */
+
+/* Journal page */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0; }
+  40%           { opacity: 1; }
+}
+
+/* Music page — iPod zoom transition */
+@keyframes zoomIn {
+  0%   { opacity: 0; transform: scale(0.15); border-radius: 16px; }
+  50%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1);    border-radius: 0;    }
+}
+@keyframes zoomOut {
+  0%   { opacity: 1; transform: scale(1);    border-radius: 0;    }
+  50%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.15); border-radius: 16px; }
 }

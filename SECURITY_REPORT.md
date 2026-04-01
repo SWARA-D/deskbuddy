@@ -347,8 +347,54 @@ In production the Postgres queries are fully parameterised (no injection risk), 
 
 | # | Severity | File | Finding | Status |
 |---|---|---|---|---|
-| 1 | Low | `middleware.ts` | Incomplete nonce-based CSP — `'unsafe-inline'` not mitigated | Open |
+| 1 | Low | `middleware.ts` | Incomplete nonce-based CSP — misleading nonce comment replaced with accurate description | **FIXED** |
 | 2 | Info | `api/auth/login/route.ts` | BFF forwards body without own length validation | Open (acceptable) |
-| 3 | Medium | `auth_service/main.py` | No token revocation on password change | Open (pre-existing) |
-| 4 | Low | `auth_service/main.py` | Double bcrypt on valid login reintroduces timing side-channel | Open |
-| 5 | Low | `lib/jwt-server.ts` | `sub` claim not validated as UUID format | Open |
+| 3 | Medium | `auth_service/main.py` | No token revocation on password change | **FIXED** |
+| 4 | Low | `auth_service/main.py` | Double bcrypt on valid login reintroduces timing side-channel | **FIXED** |
+| 5 | Low | `lib/jwt-server.ts` | `sub` claim not validated as UUID format | **FIXED** |
+
+Additionally, findings from the original 2026-03-31 "Remaining Recommendations" table that were also addressed in this batch:
+
+| # | Severity | File | Finding | Status |
+|---|---|---|---|---|
+| R1 | Medium | `api/analyze/route.ts` | Unbounded in-memory analysis cache | **FIXED** |
+| R2 | Medium | `auth_service/main.py` | No refresh token rotation / token_version | **FIXED** |
+| R3 | Medium | `api/upload/image/route.ts` | Cloudinary images share one folder | **FIXED** |
+| R6 | Low | `bot_service/main.py` | Bot service regex ReDoS potential | **FIXED** |
+| R8 | Low | `tasks_service/main.py` | Dynamic SQL construction in tasks PATCH | **FIXED** |
+| R9 | Low | `.env.example` | APP_ENV and TRUSTED_PROXIES not documented | **FIXED** |
+
+---
+
+## Fixes Applied — 2026-04-01
+
+**Commit:** `Fix all flagged security findings from 2026-04-01 review`
+**Date applied:** 2026-04-01
+
+All open security findings from the 2026-04-01 review were resolved in a single commit. Summary of changes:
+
+### `services/auth_service/main.py`
+- **Double bcrypt timing fix:** Replaced the double-verify pattern with a single `pwd_context.verify(req.password, candidate_hash)` call. For unknown users `candidate_hash` is `dummy_hash`; for known users it is the stored bcrypt hash. Exactly one bcrypt call per request regardless of whether the user exists.
+- **Token revocation via `token_version`:** Added an `@app.on_event("startup")` handler that runs `ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0` (safe, idempotent migration). The `_make_token()` function now accepts a `version` parameter and embeds `ver` in the JWT payload. The `/auth/refresh` endpoint reads the user's current `token_version` from the DB and rejects tokens whose `ver` claim does not match. The `/auth/login` endpoint reads and embeds `token_version` in newly issued tokens.
+- **New `/auth/logout-all` endpoint:** Increments `token_version` for the user identified by the submitted token, immediately invalidating all outstanding sessions for that user.
+
+### `deskbuddy-frontend/src/lib/jwt-server.ts`
+- **UUID format validation on `sub`:** After the existing `!decoded.sub` check, a UUID regex (`/^[0-9a-f]{8}-...-[0-9a-f]{12}$/i`) now validates the claim format and throws `"Invalid sub claim format"` if it does not match.
+
+### `deskbuddy-frontend/src/middleware.ts`
+- **Accurate CSP comment:** The misleading JSDoc that described an unimplemented nonce migration was replaced with an accurate description: `'unsafe-inline'` is the current approach because Next.js injects inline scripts during hydration, and journal text is never rendered as raw HTML so the XSS risk is low.
+
+### `deskbuddy-frontend/src/app/api/analyze/route.ts`
+- **Cache eviction:** Added a `setInterval` that runs every 10 minutes to delete entries from `_analysisCache` whose `expiresAt` timestamp has passed, preventing unbounded memory growth under sustained unique-text load.
+
+### `deskbuddy-frontend/src/app/api/upload/image/route.ts`
+- **Per-user Cloudinary folder:** Changed `folder = "deskbuddy"` to `folder = \`deskbuddy/${userId}\`` so each user's images are isolated in their own Cloudinary subfolder. The signature is recomputed over the updated folder string.
+
+### `services/bot_service/main.py`
+- **Bounded regex wildcards:** All `.*` patterns in the INTENTS list were replaced with `.{0,100}` or `.{0,50}` bounded alternatives to eliminate catastrophic backtracking risk on adversarial inputs.
+
+### `services/tasks_service/main.py`
+- **Explicit PATCH SQL:** Replaced the loop-built `SET clause` with explicit `if/else` branches covering the three cases (both status and title, status only, title only). The `ALLOWED_UPDATE_FIELDS` constant was removed as it is no longer needed.
+
+### `.env.example`
+- **New env var documentation:** Added `APP_ENV` and `TRUSTED_PROXIES` entries with explanatory comments at the top of the file, consistent with their usage in `bot_service`, `nlp_service`, `music_service`, and `gateway`.

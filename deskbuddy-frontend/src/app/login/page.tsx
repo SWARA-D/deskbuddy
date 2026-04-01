@@ -113,7 +113,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPass((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-primary opacity-60 hover:opacity-100 transition-opacity"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-desk-wood-dark opacity-60 hover:opacity-100 transition-opacity"
                 aria-label={showPass ? "Hide password" : "Show password"}
               >
                 <span className="material-symbols-outlined text-[18px]">
@@ -139,7 +139,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirm((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-primary opacity-60 hover:opacity-100 transition-opacity"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-desk-wood-dark opacity-60 hover:opacity-100 transition-opacity"
                   aria-label={showConfirm ? "Hide password" : "Show password"}
                 >
                   <span className="material-symbols-outlined text-[18px]">

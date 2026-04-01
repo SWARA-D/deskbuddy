@@ -20,9 +20,7 @@ export default function Header() {
   }, []);
 
   const toggle = () => {
-    if (typeof window !== "undefined" && (window as any).__dbToggleTheme) {
-      (window as any).__dbToggleTheme();
-    }
+    window.dispatchEvent(new CustomEvent("db:toggle-theme"));
   };
 
   const handleLogout = () => {
@@ -64,19 +62,20 @@ export default function Header() {
 
         {/* user badge + logout */}
         {isAuthenticated && user && (
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <span
               title={user.email}
-              className="font-pixel text-xs uppercase tracking-widest opacity-60 dark:text-[#F5E6D3] max-w-[120px] truncate"
+              className="hidden sm:block font-pixel text-xs uppercase tracking-widest opacity-60 dark:text-[#F5E6D3] max-w-[120px] truncate"
             >
               {user.email.split("@")[0]}
             </span>
             <button
               onClick={handleLogout}
               title="Log out"
-              className="size-8 sm:size-9 bg-white/40 dark:bg-black/20 border-2 border-black/10 rounded-lg flex items-center justify-center pixel-shadow hover:bg-red-100 dark:hover:bg-red-900/30 transition-all"
+              className="flex items-center gap-1.5 px-2 sm:px-3 h-8 sm:h-9 bg-white/40 dark:bg-black/20 border-2 border-black/10 rounded-lg pixel-shadow hover:bg-red-100 dark:hover:bg-red-900/30 transition-all"
             >
               <span className="material-symbols-outlined text-base sm:text-lg">logout</span>
+              <span className="font-pixel text-xs uppercase tracking-widest">Log out</span>
             </button>
           </div>
         )}

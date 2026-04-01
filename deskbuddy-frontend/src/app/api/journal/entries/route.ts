@@ -56,12 +56,14 @@ export async function GET(req: NextRequest) {
     }
     const user_id = payload?.sub ?? "local-user";
 
-    if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
-      return NextResponse.json({ error: "DATABASE_URL not configured" }, { status: 503 });
-    }
-
     if (!date) {
       return NextResponse.json({ error: "date param required" }, { status: 400 });
+    }
+
+    // No database — tell the client there is no server-side entry.
+    // The frontend already falls back to its localStorage draft, so this is silent.
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json({ entry: null });
     }
 
     const pool = await getPool();
@@ -100,10 +102,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL) {
-      return NextResponse.json({ error: "DATABASE_URL not configured" }, { status: 503 });
-    }
-
     const body = await req.json() as {
       text?: string;
       input_type?: string;
@@ -125,6 +123,11 @@ export async function POST(req: NextRequest) {
     }
     if (text.length > 50_000) {
       return NextResponse.json({ error: "Text too long (50 000 character limit)" }, { status: 400 });
+    }
+
+    // No database — acknowledge silently. The frontend saves to localStorage.
+    if (!process.env.DATABASE_URL) {
+      return NextResponse.json({ success: true, entry: null }, { status: 200 });
     }
 
     const pool = await getPool();

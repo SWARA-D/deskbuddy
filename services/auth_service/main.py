@@ -10,7 +10,7 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 import uuid
 import logging
 
@@ -96,12 +96,9 @@ class RefreshRequest(BaseModel):
     access_token: str
 
 
-app = FastAPI(title="Auth Service", version="1.0.0")
-
-
-@app.on_event("startup")
-def ensure_token_version_column():
-    """Add token_version column if it doesn't exist (safe migration)."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup: ensure token_version column exists (safe migration)
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -113,14 +110,15 @@ def ensure_token_version_column():
         logger.info("token_version column ensured")
     except Exception as e:
         logger.warning(f"Could not ensure token_version column: {e}")
-
-
-@app.on_event("shutdown")
-def shutdown():
+    yield
+    # shutdown: close DB connection pool
     global _pool
     if _pool is not None:
         _pool.closeall()
         logger.info("Auth service: DB connection pool closed")
+
+
+app = FastAPI(title="Auth Service", version="1.0.0", lifespan=lifespan)
 
 
 @app.get("/health")

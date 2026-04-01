@@ -59,11 +59,13 @@ export async function GET(request: NextRequest) {
   // Pick a random playlist from the mood's collection for variety
   const pick = playlists[Math.floor(Math.random() * playlists.length)];
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     playlistId: pick.id,
     playlistName: pick.name,
     source: 'curated',
     mood,
     allPlaylists: playlists,
   });
+  response.headers.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+  return response;
 }

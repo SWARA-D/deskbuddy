@@ -7,20 +7,26 @@
  *   // to trigger:   showToast("✦ Entry saved!");
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 export function useToast(durationMs = 2800) {
   const [toast,        setToast]        = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback(
     (msg: string) => {
       setToast(msg);
       setToastVisible(true);
-      setTimeout(() => setToastVisible(false), durationMs);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setToastVisible(false), durationMs);
     },
     [durationMs]
   );
+
+  useEffect(() => {
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, []);
 
   return { toast, toastVisible, showToast };
 }

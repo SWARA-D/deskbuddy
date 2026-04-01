@@ -30,10 +30,9 @@ async function request<T>(
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
 
   if (res.status === 401) {
-    // Token expired or invalid — clear auth and redirect to login
-    localStorage.removeItem("db-token");
-    localStorage.removeItem("db-user");
-    if (typeof window !== "undefined") window.location.href = "/login";
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("db:session-expired"));
+    }
     throw new ApiError(401, "Session expired. Please log in again.");
   }
 
@@ -54,21 +53,6 @@ export interface ApiResponse<T> {
   message: string;
   status_code: number;
 }
-
-// ── Auth ──────────────────────────────────────────────────────────────────
-
-export const authApi = {
-  login: (email: string, password: string) =>
-    request<ApiResponse<{ user: any; tokens: { access_token: string } }>>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-  register: (email: string, password: string) =>
-    request<ApiResponse<{ user: any; tokens: { access_token: string } }>>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-};
 
 // ── Journal ───────────────────────────────────────────────────────────────
 

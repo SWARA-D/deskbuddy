@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
 
       // Insert new entry with the correct date.
       const id         = randomUUID();
-      const created_at = `${entryDate}T12:00:00.000Z`;
+      const created_at = new Date().toISOString();
       await pool.query(
         `INSERT INTO journal_entries
            (id, user_id, text, input_type, created_at, sentiment, emotion, confidence, mood_summary)

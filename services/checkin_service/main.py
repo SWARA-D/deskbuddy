@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 from datetime import date
 import uuid
 import logging
@@ -59,15 +59,17 @@ def get_db():
         get_pool().putconn(conn)
 
 
-app = FastAPI(title="Checkin Service")
-
-
-@app.on_event("shutdown")
-def shutdown():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    # shutdown: close DB connection pool
     global _pool
     if _pool is not None:
         _pool.closeall()
         logger.info("Checkin service: DB connection pool closed")
+
+
+app = FastAPI(title="Checkin Service", lifespan=lifespan)
 
 
 class CheckinCreate(BaseModel):

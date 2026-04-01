@@ -1,20 +1,8 @@
 // utils/spotify.ts
 // Spotify integration for DeskBuddy
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface PlaylistInfo {
-  id: string;
-  name: string;
-}
-
-export interface PlaylistResult {
-  playlistId: string;
-  playlistName: string;
-  source: string;
-  mood: string;
-  allPlaylists: PlaylistInfo[];
-}
+import type { PlaylistInfo, PlaylistResult } from "@/types";
+export type { PlaylistInfo, PlaylistResult };
 
 // ── Fetch playlist for a given mood ──────────────────────────────────────────
 

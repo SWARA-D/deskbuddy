@@ -159,6 +159,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  // Listen for session-expired events dispatched by api.ts on 401 responses
+  useEffect(() => {
+    const handler = () => {
+      logout().then(() => { window.location.href = "/login"; });
+    };
+    window.addEventListener("db:session-expired", handler);
+    return () => window.removeEventListener("db:session-expired", handler);
+  }, [logout]);
+
   return (
     <AuthContext.Provider value={{
       user,

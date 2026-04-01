@@ -12,7 +12,7 @@ const MAX_AGE_SECS = 60 * 60; // 1 hour — matches auth service config
 const COOKIE_BASE = {
   httpOnly: true,
   secure:   process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
+  sameSite: "strict" as const,
   path:     "/",
   maxAge:   MAX_AGE_SECS,
 };

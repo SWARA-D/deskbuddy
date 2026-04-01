@@ -17,7 +17,7 @@ import type { MoodResult, JournalEntry } from "@/types";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const TODAY = new Date().toISOString().slice(0, 10);
+const getToday = () => new Date().toISOString().slice(0, 10);
 
 function toYMD(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -99,7 +99,7 @@ function MemoriesGrid({ date }: { date: string }) {
               style={{ background: "#f5f5f5" }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={s.image} alt={s.caption || s.emotion} className="w-full h-full object-cover" />
+              <img src={s.image} alt={s.caption || s.emotion} className="w-full h-full object-cover" loading="lazy" />
             </button>
           ))}
         </div>
@@ -130,6 +130,7 @@ function MemoriesGrid({ date }: { date: string }) {
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.85)" }}
           onClick={() => setLightbox(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setLightbox(null); }}
         >
           <div
             className="relative bg-white p-3 max-w-sm w-full"
@@ -137,15 +138,17 @@ function MemoriesGrid({ date }: { date: string }) {
             onClick={(e) => e.stopPropagation()}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={lightbox.image} alt={lightbox.caption} className="w-full object-contain max-h-64" />
+            <img src={lightbox.image} alt={lightbox.caption} className="w-full object-contain max-h-64" loading="lazy" />
             <div className="mt-2 font-pixel text-sm text-gray-700">
               <span className="text-base">{lightbox.emotion}</span>
               {lightbox.caption && <span className="ml-2 text-gray-500">— {lightbox.caption}</span>}
             </div>
             <p className="font-pixel text-xs text-gray-400 mt-1">{displayDate(lightbox.date)}</p>
             <button
+              autoFocus
               onClick={() => setLightbox(null)}
               className="absolute top-2 right-2 p-1 hover:bg-gray-100 rounded"
+              aria-label="Close lightbox"
             >
               <span className="material-symbols-outlined text-base">close</span>
             </button>
@@ -163,7 +166,7 @@ export default function JournalPage() {
   const { toast, toastVisible, showToast } = useToast();
 
   // ── Date navigation ────────────────────────────────────────────────────
-  const [currentDate, setCurrentDate] = useState(TODAY);
+  const [currentDate, setCurrentDate] = useState(getToday());
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   // ── Entry state ────────────────────────────────────────────────────────
@@ -240,6 +243,14 @@ export default function JournalPage() {
     const draft = localStorage.getItem(draftKey(date));
     if (draft) setEntryText(draft);
 
+    // Skip API fetch when the local draft was saved very recently (< 60 s).
+    const draftTs  = localStorage.getItem(`deskbuddy_draft_ts_${date}`);
+    const draftAge = draftTs ? Date.now() - parseInt(draftTs) : Infinity;
+    if (draftAge < 60_000) {
+      setLoadingEntry(false);
+      return; // fresh local draft — skip API call
+    }
+
     // Then try API — overwrite with server copy if found.
     try {
       const token = getStoredToken();
@@ -248,7 +259,7 @@ export default function JournalPage() {
       });
       if (res.ok) {
         const data = await res.json() as { entry: JournalEntry | null };
-        if (data.entry) {
+        if (data.entry && data.entry.text && data.entry.text !== "(entry cleared)") {
           setEntryText(data.entry.text);
           // Keep local draft in sync so next navigation also works.
           localStorage.setItem(draftKey(date), data.entry.text);
@@ -292,6 +303,7 @@ export default function JournalPage() {
     setDraftSaved(false);
     const timer = setTimeout(() => {
       localStorage.setItem(draftKey(currentDate), entryText);
+      localStorage.setItem(`deskbuddy_draft_ts_${currentDate}`, Date.now().toString());
       setDraftSaved(true);
     }, 800);
     return () => clearTimeout(timer);
@@ -382,12 +394,14 @@ export default function JournalPage() {
       const newTodos = (result.suggested_tasks ?? []).map((text, i) => ({
         id: `ai-${Date.now()}-${i}`, text, done: false, aiSuggested: true,
       }));
-      setAiTodos(newTodos);
+      // Keep manually-added todos, replace only AI-suggested ones
+      setAiTodos((prev) => [...prev.filter((t) => !t.aiSuggested), ...newTodos]);
       setAnalyzed(true);
 
+      const mergedTodos = [...aiTodos.filter((t) => !t.aiSuggested), ...newTodos];
       localStorage.setItem(analysisKey(currentDate), JSON.stringify({
         mood:           result,
-        aiTodos:        newTodos,
+        aiTodos:        mergedTodos,
         aiHabitIds:     [...matchedIds],
         habitDoneToday: [...habitDoneToday],
       }));
@@ -437,10 +451,14 @@ export default function JournalPage() {
   };
 
   const clearEntry = () => {
+    if (!window.confirm("Clear this entry? This cannot be undone.")) return;
     setEntryText(""); setAnalyzed(false); setMood(null); setAiTodos([]);
     setHabitDoneToday(new Set()); setAiHabitIds(new Set()); setDraftSaved(false);
     localStorage.removeItem(draftKey(currentDate));
     localStorage.removeItem(analysisKey(currentDate));
+    localStorage.removeItem(`deskbuddy_draft_ts_${currentDate}`);
+    // Overwrite server copy so it doesn't reappear on next load
+    saveToAPI("(entry cleared)", null).catch(() => {});
   };
 
   const monthStr = (() => {
@@ -558,7 +576,7 @@ export default function JournalPage() {
                     value={entryText}
                     onChange={(e) => setEntryText(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.ctrlKey && e.key === "Enter" && canAnalyze) { e.preventDefault(); analyzeEntry(); }
+                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && canAnalyze) { e.preventDefault(); analyzeEntry(); }
                       if ((e.ctrlKey || e.metaKey) && e.key === "s")    { e.preventDefault(); if (entryText.trim()) saveEntry(); else { localStorage.removeItem(draftKey(currentDate)); showToast("✦ Entry cleared!"); } }
                     }}
                     placeholder="Dear Journal, today was..."
@@ -576,7 +594,7 @@ export default function JournalPage() {
                 </div>
 
                 <div className="flex justify-between items-center mt-2">
-                  <p className="font-pixel text-sm text-gray-300">Ctrl+Enter to analyze · Ctrl+S to save</p>
+                  <p className="font-pixel text-sm text-gray-300">Ctrl/⌘+Enter to analyze · Ctrl/⌘+S to save</p>
                   <div className="flex items-center gap-3">
                     {draftSaved && (
                       <span className="font-pixel text-xs text-green-500 opacity-70">✓ draft saved</span>
@@ -588,6 +606,8 @@ export default function JournalPage() {
                 <button
                   onClick={analyzeEntry}
                   disabled={!canAnalyze}
+                  aria-busy={analyzing}
+                  aria-label={analyzing ? "Analyzing your entry…" : "Analyze entry"}
                   className="mt-3 w-full py-3 font-pixel text-xl text-white flex items-center justify-center gap-2 transition-opacity"
                   style={{
                     background: "#292929", border: "3px solid #292929",

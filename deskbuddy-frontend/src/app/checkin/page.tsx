@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import DeskLayout from "@/components/layout/DeskLayout";
 import BackButton from "@/components/ui/BackButton";
+import Toast from "@/components/ui/Toast";
+import { useToast } from "@/hooks/useToast";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,6 +60,8 @@ function writeSnapshots(snaps: Snapshot[]): void {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CheckinPage() {
+  const { toast, toastVisible, showToast } = useToast();
+
   const [snapshots,     setSnapshots]     = useState<Snapshot[]>([]);
   const [pinned,        setPinned]        = useState<Set<string>>(new Set());
   const [savedSnap,     setSavedSnap]     = useState<Snapshot | null>(null); // for post-save journal prompt
@@ -207,7 +211,10 @@ export default function CheckinPage() {
     if (p.has(id)) {
       p.delete(id);
     } else {
-      if (p.size >= 3) return; // max 3 pinned
+      if (p.size >= 3) {
+        showToast("✦ Max 3 pins — unpin one first");
+        return;
+      }
       p.add(id);
     }
     writePinned(p);
@@ -230,7 +237,7 @@ export default function CheckinPage() {
   const snapshotDates = new Set(snapshots.map((s) => s.date));
 
   // Count consecutive days ending today with at least one snapshot.
-  const streak = (() => {
+  const streak = useMemo(() => {
     let count = 0;
     const d = new Date();
     while (snapshotDates.has(d.toLocaleDateString("en-CA"))) {
@@ -238,7 +245,7 @@ export default function CheckinPage() {
       d.setDate(d.getDate() - 1);
     }
     return count;
-  })();
+  }, [snapshotDates]);
 
   const emotionOf = (name: string) => EMOTIONS.find((e) => e.name === name);
 
@@ -539,10 +546,12 @@ export default function CheckinPage() {
                               PINNED
                             </div>
                           )}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={snap.image}
                             alt={snap.caption || snap.emotion}
                             className="w-full aspect-square object-cover"
+                            loading="lazy"
                           />
                           <div className="absolute bottom-1.5 left-0 right-0 px-2 text-center">
                             <p className="font-pixel text-xs text-pixel-black/60 truncate leading-tight">
@@ -594,6 +603,7 @@ export default function CheckinPage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
           onClick={() => setSelected(null)}
+          onKeyDown={(e) => { if (e.key === "Escape") setSelected(null); }}
         >
           <div
             className="bg-white dark:bg-zinc-900 max-w-sm w-full p-5 relative"
@@ -601,6 +611,7 @@ export default function CheckinPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <button
+              autoFocus
               onClick={() => setSelected(null)}
               className="absolute top-3 right-3 opacity-40 hover:opacity-100 transition-opacity"
               aria-label="Close"
@@ -608,11 +619,13 @@ export default function CheckinPage() {
               <span className="material-symbols-outlined">close</span>
             </button>
 
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={selected.image}
               alt={selected.caption || selected.emotion}
               className="w-full aspect-square object-cover mb-4"
               style={{ border: "3px solid #292929" }}
+              loading="lazy"
             />
 
             <div className="flex items-center gap-2 mb-2">
@@ -640,6 +653,8 @@ export default function CheckinPage() {
           </div>
         </div>
       )}
+
+      <Toast message={toast} visible={toastVisible} />
     </DeskLayout>
   );
 }

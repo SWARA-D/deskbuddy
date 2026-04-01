@@ -26,15 +26,15 @@ function getApiHost(): string {
  * browsers fall back to 'unsafe-inline'.  Once the root layout propagates
  * the nonce to all inline <script> tags, 'unsafe-inline' can be removed.
  */
-function buildCsp(nonce: string): string {
+function buildCsp(): string {
   const isDev   = process.env.NODE_ENV === "development";
   const apiHost = getApiHost();
 
   return [
     "default-src 'self'",
     isDev
-      ? `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'unsafe-eval' https://open.spotify.com`
-      : `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://open.spotify.com`,
+      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://open.spotify.com"
+      : "script-src 'self' 'unsafe-inline' https://open.spotify.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     `connect-src 'self' https://${apiHost} https://open.spotify.com https://api.spotify.com https://accounts.spotify.com https://api-inference.huggingface.co https://api.anthropic.com`,
@@ -55,14 +55,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── 2. Generate a per-request nonce ────────────────────────────────────────
-  const nonce = btoa(crypto.randomUUID());
-
-  // Set nonce on the REQUEST so Server Components can read it via headers().
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-nonce", nonce);
-
-  // ── 3. Auth enforcement ────────────────────────────────────────────────────
+  // ── 2. Auth enforcement ────────────────────────────────────────────────────
   const token = request.cookies.get("db-token")?.value;
 
   let response: NextResponse;
@@ -72,18 +65,20 @@ export function middleware(request: NextRequest) {
     if (token) {
       return NextResponse.redirect(new URL("/", request.url));
     }
-    response = NextResponse.next({ request: { headers: requestHeaders } });
+    response = NextResponse.next();
   } else if (!token) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   } else {
-    response = NextResponse.next({ request: { headers: requestHeaders } });
+    response = NextResponse.next();
   }
 
-  // ── 4. Attach nonce + CSP to the response ─────────────────────────────────
-  response.headers.set("x-nonce", nonce);
-  response.headers.set("Content-Security-Policy", buildCsp(nonce));
+  // ── 3. Attach security headers ────────────────────────────────────────────
+  response.headers.set("Content-Security-Policy", buildCsp());
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   return response;
 }
 

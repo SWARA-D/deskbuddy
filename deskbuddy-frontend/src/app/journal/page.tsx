@@ -282,6 +282,12 @@ export default function JournalPage() {
 
   // ── Draft autosave ─────────────────────────────────────────────────────
   useEffect(() => {
+    // When text is cleared entirely, remove the draft immediately.
+    if (entryText === "") {
+      localStorage.removeItem(draftKey(currentDate));
+      setDraftSaved(false);
+      return;
+    }
     if (entryText.length < 5) return;
     setDraftSaved(false);
     const timer = setTimeout(() => {
@@ -553,7 +559,7 @@ export default function JournalPage() {
                     onChange={(e) => setEntryText(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.ctrlKey && e.key === "Enter" && canAnalyze) { e.preventDefault(); analyzeEntry(); }
-                      if ((e.ctrlKey || e.metaKey) && e.key === "s")    { e.preventDefault(); if (entryText.trim()) saveEntry(); }
+                      if ((e.ctrlKey || e.metaKey) && e.key === "s")    { e.preventDefault(); if (entryText.trim()) saveEntry(); else { localStorage.removeItem(draftKey(currentDate)); showToast("✦ Entry cleared!"); } }
                     }}
                     placeholder="Dear Journal, today was..."
                     className="font-pixel w-full h-full bg-transparent border-none resize-none p-1 text-pixel-black dark:text-[#F5E6D3] placeholder-gray-300 focus:ring-0 focus:outline-none"

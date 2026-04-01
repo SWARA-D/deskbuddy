@@ -5,3 +5,12 @@ doc/
 # markdown files (except README)
 *.md
 !README.md
+
+# secrets — never commit real .env files
+.env
+services/**/.env
+
+# debug/temp files
+_auth_logs.txt
+_seed_localstorage.js
+*.png

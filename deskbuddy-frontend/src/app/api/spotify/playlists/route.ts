@@ -48,10 +48,13 @@ const MOOD_PLAYLISTS: Record<string, { id: string; name: string }[]> = {
 
 // ── GET /api/spotify/playlists?mood=happy ─────────────────────────────────────
 
-export async function GET(request: NextRequest) {
-  const mood = request.nextUrl.searchParams.get('mood') || 'calm';
+const VALID_MOODS = new Set(Object.keys(MOOD_PLAYLISTS));
 
-  const playlists = MOOD_PLAYLISTS[mood] || MOOD_PLAYLISTS.calm;
+export async function GET(request: NextRequest) {
+  const rawMood = request.nextUrl.searchParams.get('mood') ?? '';
+  const mood    = VALID_MOODS.has(rawMood) ? rawMood : 'calm';
+
+  const playlists = MOOD_PLAYLISTS[mood];
 
   // Pick a random playlist from the mood's collection for variety
   const pick = playlists[Math.floor(Math.random() * playlists.length)];

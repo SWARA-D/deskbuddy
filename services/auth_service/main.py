@@ -3,7 +3,7 @@ DeskBuddy Auth Service
 Handles user registration, login, and JWT token generation
 """
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from pydantic_settings import BaseSettings
 from passlib.context import CryptContext
 from jose import jwt, JWTError
@@ -19,7 +19,7 @@ logger = logging.getLogger("auth_service")
 
 class Settings(BaseSettings):
     database_url: str = "postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_auth"
-    jwt_secret: str = "DEV_SECRET_CHANGE_IN_PRODUCTION"
+    jwt_secret: str = Field(..., min_length=32)  # Required — set JWT_SECRET env var; no default
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     db_pool_min: int = 1
@@ -98,6 +98,15 @@ class RefreshRequest(BaseModel):
 
 app = FastAPI(title="Auth Service", version="1.0.0")
 
+
+@app.on_event("shutdown")
+def shutdown():
+    global _pool
+    if _pool is not None:
+        _pool.closeall()
+        logger.info("Auth service: DB connection pool closed")
+
+
 @app.get("/health")
 def health():
     return {"success": True, "data": {"status": "ok", "service": "auth"}, "message": "Auth healthy"}
@@ -162,6 +171,8 @@ def login(req: LoginRequest):
     }
 
 
+MAX_REFRESH_AGE_SECONDS = 7 * 24 * 3600  # tokens older than 7 days cannot be refreshed
+
 @app.post("/auth/refresh")
 def refresh(req: RefreshRequest):
     try:
@@ -172,8 +183,11 @@ def refresh(req: RefreshRequest):
             options={"verify_exp": False},
         )
         user_id = payload.get("sub")
+        iat = payload.get("iat", 0)
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token")
+        if datetime.utcnow().timestamp() - iat > MAX_REFRESH_AGE_SECONDS:
+            raise HTTPException(status_code=401, detail="Session expired, please log in again")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 

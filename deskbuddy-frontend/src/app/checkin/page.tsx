@@ -145,26 +145,48 @@ export default function CheckinPage() {
   };
 
   // ── Save snapshot ─────────────────────────────────────────────────────
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!imagePreview || !emotion) return;
     setSaving(true);
-    const snap: Snapshot = {
-      id:        `snap-${Date.now()}`,
-      image:     imagePreview,
-      emotion,
-      caption:   caption.trim(),
-      date:      today,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [snap, ...readSnapshots()];
-    writeSnapshots(updated);
-    setSnapshots(updated);
-    setMode("gallery");
-    setImagePreview(null);
-    setEmotion("");
-    setCaption("");
-    setSaving(false);
-    setSavedSnap(snap); // trigger journal prompt
+
+    try {
+      // Try to upload to Cloudinary (server-side, keeps credentials off the client).
+      // On failure (Cloudinary not configured, network error, etc.) store the
+      // base64 data URL in localStorage as a graceful fallback.
+      let imageUrl = imagePreview;
+      try {
+        const res = await fetch("/api/upload/image", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ data: imagePreview }),
+        });
+        if (res.ok) {
+          const { url } = await res.json() as { url?: string };
+          if (url) imageUrl = url;
+        }
+      } catch {
+        // Network error or Cloudinary not configured — base64 fallback
+      }
+
+      const snap: Snapshot = {
+        id:        `snap-${Date.now()}`,
+        image:     imageUrl,
+        emotion,
+        caption:   caption.trim(),
+        date:      today,
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [snap, ...readSnapshots()];
+      writeSnapshots(updated);
+      setSnapshots(updated);
+      setMode("gallery");
+      setImagePreview(null);
+      setEmotion("");
+      setCaption("");
+      setSavedSnap(snap); // trigger journal prompt
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ── Delete ────────────────────────────────────────────────────────────

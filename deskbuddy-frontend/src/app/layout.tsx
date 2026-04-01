@@ -1,9 +1,7 @@
-"use client";
-
 import "./globals.css";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
 import { AuthProvider } from "@/lib/auth";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { VT323, Plus_Jakarta_Sans } from "next/font/google";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -20,30 +18,22 @@ const vt323 = VT323({
   display: "swap",
 });
 
+/**
+ * Root layout — Server Component.
+ *
+ * Theme state is managed by <ThemeProvider> (client component) which
+ * applies the "light" / "dark" class to <html> on mount and listens for
+ * "db:toggle-theme" CustomEvents. This replaces the old window.__dbToggleTheme
+ * global, and makes this file a Server Component so Next.js can propagate the
+ * per-request nonce (set by middleware) to its generated scripts.
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-
-  useEffect(() => {
-    const saved = localStorage.getItem("db-theme");
-    if (saved === "dark" || saved === "light") {
-      setTheme(saved);
-    } else {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setTheme(prefersDark ? "dark" : "light");
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("db-theme", theme);
-  }, [theme]);
-
-  useEffect(() => {
-    (window as any).__dbToggleTheme = () =>
-      setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  }, []);
-
   return (
-    <html lang="en" className={`${theme} ${plusJakartaSans.variable} ${vt323.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${plusJakartaSans.variable} ${vt323.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -61,9 +51,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="bg-desk-wood dark:bg-desk-wood-dark font-display text-[#2C241B] dark:text-[#F5E6D3] selection:bg-primary/30 overflow-hidden transition-colors duration-300">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

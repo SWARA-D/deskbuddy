@@ -6,7 +6,7 @@ services:
     container_name: deskbuddy_postgres
     environment:
       POSTGRES_USER: deskbuddy
-      POSTGRES_PASSWORD: deskbuddy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
     volumes:
       - ./db/init:/docker-entrypoint-initdb.d
@@ -42,7 +42,8 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - JWT_SECRET=DEV_SECRET_CHANGE_IN_PRODUCTION
+      - JWT_SECRET=${JWT_SECRET}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
       - REDIS_URL=redis://redis:6379/0
     command: uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 
@@ -53,8 +54,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_auth
-      - JWT_SECRET=DEV_SECRET_CHANGE_IN_PRODUCTION
+      - DATABASE_URL=postgresql://deskbuddy:${POSTGRES_PASSWORD}@postgres:5432/deskbuddy_auth
+      - JWT_SECRET=${JWT_SECRET}
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
   journal_service:
@@ -64,17 +65,21 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_journal
+      - DATABASE_URL=postgresql://deskbuddy:${POSTGRES_PASSWORD}@postgres:5432/deskbuddy_journal
     command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
 
   nlp_service:
     build: ./services/nlp_service
     container_name: deskbuddy_nlp
+    environment:
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     command: uvicorn main:app --host 0.0.0.0 --port 8003 --reload
 
   music_service:
     build: ./services/music_service
     container_name: deskbuddy_music
+    environment:
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     command: uvicorn main:app --host 0.0.0.0 --port 8004 --reload
 
   tasks_service:
@@ -84,7 +89,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_tasks
+      - DATABASE_URL=postgresql://deskbuddy:${POSTGRES_PASSWORD}@postgres:5432/deskbuddy_tasks
     command: uvicorn main:app --host 0.0.0.0 --port 8005 --reload
 
   checkin_service:
@@ -94,12 +99,14 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://deskbuddy:deskbuddy@postgres:5432/deskbuddy_checkin
+      - DATABASE_URL=postgresql://deskbuddy:${POSTGRES_PASSWORD}@postgres:5432/deskbuddy_checkin
     command: uvicorn main:app --host 0.0.0.0 --port 8006 --reload
 
   bot_service:
     build: ./services/bot_service
     container_name: deskbuddy_bot
+    environment:
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY}
     command: uvicorn main:app --host 0.0.0.0 --port 8007 --reload
 
 volumes:
